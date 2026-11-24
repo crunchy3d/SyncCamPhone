@@ -16,6 +16,7 @@ videos with any stereo software (for example with [StereoMate](https://github.co
 - **Astro**: long exposure series (up to 16 s frames) on a tripod
 - **Time-lapse**: synchronised stereo photos at a fixed interval
 - **Stereo video** up to 4K, frame-locked between the phones, with sound; VBR or CBR
+- **Anti-flicker** (50 / 60 Hz) against stripes under mains lamps, in photos and videos
 - **Lenses**: main, ultra-wide (video) and front camera, chosen on the CONTROL phone
 - **MONO** mode for a single phone
 - **Remote trigger** (experimental): presses the shutter of Google Camera, Blackmagic Camera or other
@@ -29,15 +30,15 @@ timing - **Probe (camera tests) -> Timing test** in the app tells you.
 
 ## Download and install
 
-1. Download `SyncCamPhone_V0_104.apk` from the [Releases](../../releases) page on each phone.
+1. Download `SyncCamPhone_V0_105.apk` from the [Releases](../../releases) page on each phone.
 2. Download it with **Chrome** and open it from Chrome's download message; allow Chrome to "install unknown
    apps" when Android asks. (Opening the APK in Files by Google or Firefox may end with "The app wasn't
    installed" on some phones.)
 3. Start **SyncCamPhone** and allow camera, microphone and photos access.
 
-Read the **[User Manual (PDF)](docs/SyncCamPhone_User_Manual_V0_104.pdf)** before the first use. Also in
-[German](docs/SyncCamPhone_User_Manual_V0_104_DE.pdf), [French](docs/SyncCamPhone_User_Manual_V0_104_FR.pdf),
-[Dutch](docs/SyncCamPhone_User_Manual_V0_104_NL.pdf) and [Slovene](docs/SyncCamPhone_User_Manual_V0_104_SL.pdf)
+Read the **[User Manual (PDF)](docs/SyncCamPhone_User_Manual_V0_105.pdf)** before the first use. Also in
+[German](docs/SyncCamPhone_User_Manual_V0_105_DE.pdf), [French](docs/SyncCamPhone_User_Manual_V0_105_FR.pdf),
+[Dutch](docs/SyncCamPhone_User_Manual_V0_105_NL.pdf) and [Slovene](docs/SyncCamPhone_User_Manual_V0_105_SL.pdf)
 (the app itself is in English; the manuals keep its button and setting names in English).
 
 ## Quick start
