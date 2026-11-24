@@ -1639,6 +1639,23 @@ public class SyncActivity extends Activity {
         });
         hint(sys, "Robustness weights of the HDR / night / astro merge on the graphics chip (faster). "
                 + "Check: both, the CPU result is used, the difference goes to the info file (slower).");
+        seg(sys, "Anti-flicker", FLICKER_NAMES, () -> flicker, k -> {
+            flicker = k;
+            savePhotoPrefs();
+            // the current exposure at once on a whole step (the next AE keeps to the steps)
+            double[] fr = flickerRound(master.exposureNs / 1e6, master.iso, aeMaxExposureMs(), 50,
+                    Math.max(master.iso, aeIsoCap()));
+            if (expEdit != null && isoEdit != null) {
+                expEdit.setText(String.format(Locale.US, "%.3f", fr[0]));
+                isoEdit.setText(String.valueOf(Math.round(fr[1])));
+            }
+            if (master.effFormat() == 3) master.hdrPlan = computeHdrPlan();
+            master.lookChanged("anti-flicker " + FLICKER_NAMES[k]);
+            sendState(true, master.align);
+        });
+        hint(sys, "Lamps on 50 Hz / 60 Hz mains flicker; short exposures then show stripes. Photo and video "
+                + "exposures of 10 ms (60 Hz: 8.3 ms) or longer become whole steps (10, 20, 30 ms ...); the ISO "
+                + "keeps the brightness. Shorter exposures and astro stay as they are.");
         subhead(sys, "Remote trigger (experiment)");
         LinearLayout rr = fieldRow(sys);
         remoteBtn = button(rr, "Start remote trigger (Google Camera)");
@@ -1805,9 +1822,43 @@ public class SyncActivity extends Activity {
         return (int) Math.max(50, Math.min(SINGLE_ISO_MANUAL, parse(singleIsoEdit, 800)));
     }
 
-    /** Longest exposure the AE uses: the shutter limit for single photos, else the frame time. */
+    /** Longest exposure the AE uses: the shutter limit for single photos, else the frame time
+     *  (with anti-flicker: down to a whole flicker step, e.g. 32.3 -> 30 ms). */
     private double aeMaxExposureMs() {
-        return singleFrame() ? singleMaxExposureMs() : maxExposureMs();
+        return flickerFloor(singleFrame() ? singleMaxExposureMs() : maxExposureMs());
+    }
+
+    // ANTI-FLICKER (item 32, V0.105): lamps on 50 / 60 Hz mains flicker at 100 / 120 Hz; our manual
+    // exposure switches the camera's own antibanding off. Exposures of at least one flicker step
+    // (10 / 8.33 ms) become whole steps (rows of the rolling shutter then catch whole cycles: no
+    // stripes), the ISO keeps the brightness. Shorter exposures (daylight, highlight frames) and astro
+    // stay as they are. Only the CONTROL phone rounds: the camera phones get its values.
+    static final String[] FLICKER_NAMES = {"Off", "50 Hz", "60 Hz"};
+    private int flicker = 0;
+
+    private double flickerStepMs() {
+        return flicker == 1 ? 10.0 : flicker == 2 ? 1000.0 / 120 : 0;
+    }
+
+    /** A limit (ms) down to a whole flicker step (unchanged when off or below one step). */
+    private double flickerFloor(double maxMs) {
+        double st = flickerStepMs();
+        if (st <= 0 || maxMs < st) return maxMs;
+        return Math.floor(maxMs / st + 1e-6) * st;
+    }
+
+    /** {exposure ms, ISO} with the exposure on the NEAREST flicker step (same light exposure x ISO):
+     *  up only when it fits maxMs and the ISO stays >= isoMin, down only when the ISO stays <= isoMax. */
+    private double[] flickerRound(double exp, double iso, double maxMs, double isoMin, double isoMax) {
+        double st = flickerStepMs();
+        if (st <= 0 || exp < st * 0.999) return new double[]{exp, iso};
+        double ei = exp * iso;
+        double dn = Math.max(st, Math.floor(exp / st + 1e-6) * st), up = dn + st;
+        if (Math.abs(exp - dn) < 1e-3) return new double[]{dn, iso};
+        boolean upOk = up <= maxMs + 1e-6 && ei / up >= isoMin - 0.5;
+        boolean dnOk = ei / dn <= isoMax + 0.5;
+        double e = upOk && (!dnOk || up / exp < exp / dn) ? up : dn;
+        return new double[]{e, Math.max(isoMin, Math.min(Math.max(isoMax, isoMin), ei / e))};
     }
 
     /** How much light (EV) a single photo misses at the AE limits (the last AE), 0 = enough. */
@@ -1833,6 +1884,13 @@ public class SyncActivity extends Activity {
      * Small slider popup next to a chip. The value is applied when the slider is released (and by
      * the optional extra button, e.g. "auto").
      */
+    /** Manual exposure slider with anti-flicker: from one step up only whole steps (ms). */
+    private double flickerSnap(double v) {
+        double st = flickerStepMs();
+        if (st <= 0 || v < st * 0.95) return v;
+        return Math.max(st, Math.min(flickerFloor(maxExposureMs()), Math.round(v / st) * st));
+    }
+
     private void showSlider(String what, android.view.View anchor) {
         final double min, max, start;
         final boolean log;
@@ -1846,9 +1904,9 @@ public class SyncActivity extends Activity {
                 max = maxExposureMs();
                 start = master.exposureNs / 1e6;
                 log = true;
-                fmt = v -> exposureText(Math.round(v * 1e6));
+                fmt = v -> exposureText(Math.round(flickerSnap(v) * 1e6));
                 apply = v -> {
-                    expEdit.setText(String.format(Locale.US, "%.3f", v));
+                    expEdit.setText(String.format(Locale.US, "%.3f", flickerSnap(v)));
                     sendState(true, master.align);
                 };
                 break;
@@ -1913,7 +1971,10 @@ public class SyncActivity extends Activity {
                 : min + (max - min) * p / 1000.0;
         double p0 = log ? Math.log(start / min) / Math.log(max / min) * 1000 : (start - min) / (max - min) * 1000;
         sb.setProgress((int) Math.round(Math.max(0, Math.min(1000, p0))));
-        box.addView(sb, new LinearLayout.LayoutParams(dp(300), -2));
+        sb.setMinimumHeight(dp(48));                                // tall touch strip, easy to grab
+        sb.setPadding(dp(16), dp(14), dp(16), dp(14));
+        sb.setScaleY(1.3f);                                         // bigger knob and line
+        box.addView(sb, new LinearLayout.LayoutParams(dp(300), dp(48)));
         android.widget.PopupWindow pw = new android.widget.PopupWindow(box, -2, -2, true);
         pw.setOutsideTouchable(true);
         sb.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
@@ -1935,7 +1996,10 @@ public class SyncActivity extends Activity {
                 ea.run();
                 pw.dismiss();
             });
-            box.addView(b);
+            LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, -2);
+            blp.topMargin = dp(12);                                 // gap: a finger on the slider misses it
+            blp.gravity = Gravity.END;
+            box.addView(b, blp);
         }
         box.measure(0, 0);
         int[] loc = new int[2];
@@ -2144,6 +2208,9 @@ public class SyncActivity extends Activity {
         } else if (exp < 0.125) {
             exp = 0.125;
         }
+        double[] fr = flickerRound(exp, iso, aeMaxExposureMs(), 50, isoCap);
+        exp = fr[0];
+        iso = fr[1];
         expEdit.setText(String.format(Locale.US, "%.3f", exp));
         isoEdit.setText(String.valueOf(Math.round(iso)));
         sendState(true, master.align);
@@ -2352,7 +2419,8 @@ public class SyncActivity extends Activity {
             exp = 0.125;
             iso = Math.max(50, ei / exp);
         }
-        return new double[]{exp, iso};
+        return flickerRound(exp, iso, beyond ? flickerFloor(maxExposureMs()) : aeMaxExposureMs(), 50,
+                Math.max(iso, beyond ? manualIsoCap() : aeIsoCap()));
     }
 
     private void showAePanel() {
@@ -2688,6 +2756,7 @@ public class SyncActivity extends Activity {
                 .putInt("sharpLevel", master.sharpLevel)
                 .putInt("clarityLevel", master.clarityLevel)
                 .putInt("gpuMode", master.gpuMode)
+                .putInt("flicker", flicker)
                 .putInt("astroTime", astroSeconds)
                 .putInt("astroWb", astroWb)
                 .putInt("astroStep", astroStepIdx)
@@ -2851,7 +2920,7 @@ public class SyncActivity extends Activity {
             android.util.Range<Integer> r = camChars.get(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
             if (r != null) isoMax = Math.min(isoMax, r.getUpper());
         }
-        long eMax = Math.max(e0, slowestNs());
+        long eMax = Math.max(e0, Math.round(flickerFloor(slowestNs() / 1e6) * 1e6));   // anti-flicker: whole steps
         java.util.List<Double> ratios = new java.util.ArrayList<>();
         // at most maxN longer frames, steps of at most MAX_STEP: beyond maxN steps the range is
         // limited (the shadows stay darker - the user's choice), never a bigger step
@@ -2867,7 +2936,12 @@ public class SyncActivity extends Activity {
             double light = e0 * (double) i0 * r;
             long e = Math.min(eMax, Math.max(e0, Math.round(light / i0)));
             int iso = (int) Math.max(i0, Math.min(isoMax, Math.round(light / e)));
-            if (e == lastE && iso == lastI) continue;            // limits reached: same frame again
+            if (flicker > 0) {                                   // item 32: longer frames on whole steps
+                double[] fr = flickerRound(e / 1e6, iso, eMax / 1e6, 50, isoMax);
+                e = Math.min(eMax, Math.round(fr[0] * 1e6));
+                iso = (int) Math.round(fr[1]);
+            }
+            if (e == lastE && iso == lastI) continue;           // limits reached: same frame again
             lastE = e;
             lastI = iso;
             if (plan.length() > 0) plan.append(';');
@@ -3018,6 +3092,7 @@ public class SyncActivity extends Activity {
         MergeCore.clarityLevel = master.clarityLevel;
         master.gpuMode = Math.max(0, Math.min(MergeCore.GPU_NAMES.length - 1, sp.getInt("gpuMode", 1)));
         MergeCore.gpuMode = master.gpuMode;
+        flicker = Math.max(0, Math.min(FLICKER_NAMES.length - 1, sp.getInt("flicker", 0)));
         if (aeClipEdit != null) aeClipEdit.setText(sp.getString("aeClip", "0.1"));
         // the old default 30 s becomes 120 s once (V0.103); a value the user typed later is kept
         String sb = sp.getString("standbyS", "120");
