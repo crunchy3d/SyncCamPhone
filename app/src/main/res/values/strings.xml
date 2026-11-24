@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tap_service_desc">SyncCamPhone remote trigger: presses the shutter of another camera app (e.g. Google Camera) on all phones at the same synchronised moment. Used only while the remote trigger is started in SyncCamPhone.</string>
+</resources>

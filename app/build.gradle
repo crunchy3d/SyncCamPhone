@@ -1,0 +1,29 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.crunchy3d.synccamphone'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.crunchy3d.synccamphone'
+        minSdk 26
+        targetSdk 34
+        versionCode 104
+        versionName '0.104'
+    }
+
+    buildTypes {
+        debug {
+            // a debuggable app runs with far less ART optimization: the in-app HDR merge was
+            // 5-10x slower. Same debug signing key, so updates install as before.
+            debuggable false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
