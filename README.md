@@ -35,7 +35,10 @@ timing - **Probe (camera tests) -> Timing test** in the app tells you.
    installed" on some phones.)
 3. Start **SyncCamPhone** and allow camera, microphone and photos access.
 
-Read the **[User Manual (PDF)](docs/SyncCamPhone_User_Manual_V0_104.pdf)** before the first use.
+Read the **[User Manual (PDF)](docs/SyncCamPhone_User_Manual_V0_104.pdf)** before the first use. Also in
+[German](docs/SyncCamPhone_User_Manual_V0_104_DE.pdf), [French](docs/SyncCamPhone_User_Manual_V0_104_FR.pdf),
+[Dutch](docs/SyncCamPhone_User_Manual_V0_104_NL.pdf) and [Slovene](docs/SyncCamPhone_User_Manual_V0_104_SL.pdf)
+(the app itself is in English; the manuals keep its button and setting names in English).
 
 ## Quick start
 
