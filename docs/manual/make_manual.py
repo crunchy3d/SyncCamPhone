@@ -25,7 +25,7 @@ from reportlab.platypus.tableofcontents import TableOfContents
 
 HERE = Path(__file__).resolve().parent
 IMG = HERE / 'img'
-OUT_BASE = 'SyncCamPhone_User_Manual_V0_105'
+OUT_BASE = 'SyncCamPhone_User_Manual_V0_106'
 LANGS = ['de', 'fr', 'nl', 'sl']
 TR = {}          # English -> translation of the current language
 SEEN = []        # English strings in build order (extract mode)
@@ -52,7 +52,7 @@ pdfmetrics.registerFont(TTFont('Body-B', str(FONTS / 'calibrib.ttf')))
 pdfmetrics.registerFont(TTFont('Body-I', str(FONTS / 'calibrii.ttf')))
 pdfmetrics.registerFontFamily('Body', normal='Body', bold='Body-B', italic='Body-I', boldItalic='Body-B')
 
-VERSION = 'Version V0.105 – November 2026'
+VERSION = 'Version V0.106 – November 2026'
 INK = colors.HexColor('#1F2933')
 ACCENT = colors.HexColor('#1F5A96')
 MUTED = colors.HexColor('#5F6B7A')
@@ -180,7 +180,7 @@ def on_page(c, doc):
     c.saveState()
     c.setFont('Body', 8.5)
     c.setFillColor(MUTED)
-    c.drawString(20 * mm, 12 * mm, t('SyncCamPhone V0.105 \u2013 User Manual'))
+    c.drawString(20 * mm, 12 * mm, t('SyncCamPhone V0.106 \u2013 User Manual'))
     c.drawRightString(190 * mm, 12 * mm, str(doc.page))
     c.setStrokeColor(RULE)
     c.setLineWidth(0.5)
@@ -390,7 +390,8 @@ def ch_photo():
         *steps(['Mount the phones on the stereo bar and switch to <b>PHOTO</b>.',
                 'Wait for the green <b>SYNC</b>.',
                 'Tap <b>AE</b> to measure the light (or set exposure and ISO with the sliders).',
-                'Tap the image to focus, or set the focus with the focus chip.',
+                'Tap the image to focus, or set the focus with the focus chip. With a CONTROL only phone, tap '
+                'the image on a camera phone: all phones then use that distance.',
                 'Press the shutter. All phones take the photo at the same moment.']),
         P('Below the sync status the CONTROL phone shows the result of the last photo, e.g. <b>photo #12: -3 µs'
           '</b> (how far apart the frames of the phones were). The thumbnail under the shutter shows the last photo.'),
@@ -408,10 +409,12 @@ def ch_photo():
                   'the picture with the brightness slider that opens after AE, or with the ISO slider: both may '
                   'go beyond the limits, up to ISO 3200 (the next AE returns to the limits). Or raise Max ISO / Slowest shutter and press AE again.',
                   '<b>Night</b> (default <b>off</b>): when <b>on</b> and the light is short, the app takes '
-                  'several frames and averages them; the photo chip shows <b>· Night</b> and the photo takes a '
-                  'few seconds. Night is meant for still scenes: faces may look smeared.']),
-        tip('Photograph people with JPEG and Night off: the camera\'s own processing renders faces much better '
-            'than the app\'s merge.'),
+                  'several frames right around the moment of the press and averages them; the photo chip shows '
+                  '<b>· Night</b> and the photo takes a few seconds. Moving parts (a talking mouth, hands) are '
+                  'taken from one frame only, so they stay sharp. Night photos have their own gentle look: the '
+                  'Local contrast and Sharpening settings do not apply to them.']),
+        tip('In dim light, Night gives less noise and more detail than a single JPEG, also for people. For fast '
+            'movement use JPEG with a shorter Slowest shutter.'),
         P('5.4 HDR and Night', 'h2'),
         P('HDR takes a short burst. The phones need to stay still for about a second, and moving objects may '
           'look blurred or be taken from one frame only. The merging takes a few seconds after the burst; the '
@@ -657,8 +660,8 @@ def ch_trouble():
                                                '(Astro longer). Keep <b>GPU merge On</b>.'],
             ['Astro photo is blurred', 'The phones moved: use a stable tripod, do not touch them during the '
                                        'series, avoid wind.'],
-            ['Faces look smeared or waxy', 'Use JPEG with Night <b>off</b>; Slowest shutter 1/60 s or '
-                                           '1/125 s for moving people (chapter 5.3).'],
+            ['Faces look smeared or waxy', 'Use Night <b>on</b> (moving parts stay sharp), or JPEG with '
+                                           'Slowest shutter 1/60 s or 1/125 s for fast movement (chapter 5.3).'],
             ['Note "Not enough light"', 'Brighten with the brightness or ISO slider, or raise Max ISO / Slowest '
                                         'shutter and press AE again (chapter 5.3).'],
             ['Dark areas are noisy', 'Use HDR or Astro instead of JPEG; increase Max ISO only if needed.'],
