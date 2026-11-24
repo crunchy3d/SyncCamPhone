@@ -92,6 +92,11 @@ final class CameraNode {
     volatile boolean cbr;                     // constant video bitrate
     volatile int timelapse;                   // 0, or the folder number of the running time-lapse
     volatile String sideWarn = "-";           // the CONTROL phone's same-side warning, or "-"
+    // item 38 (2026-11-24): tap focus on a camera phone (CONTROL without a camera): the measured distance
+    // goes to the CONTROL phone (STATUS 37-39), which sets it for all phones
+    volatile int focusSeq;
+    volatile float focusTapD;
+    volatile int focusTapSharp;
     volatile int lensInUse = -1;              // the lens this camera uses (sent in STATUS 36)
 
     /** The format the user chose (the AE meters for it). */
@@ -500,7 +505,7 @@ final class CameraNode {
                 Downloads.side, Math.max(maxImg, photoSeqDone), maxVid,
                 aeSeq, Double.isNaN(aeRatio) ? 1.0 : aeRatio, aeLight, aeClip,
                 Float.isNaN(rawDark) ? -1f : rawDark, Float.isNaN(rawMedian) ? -1f : rawMedian, SyncNet.join(awb),
-                lensInUse);
+                lensInUse, focusSeq, focusTapD, focusTapSharp);
         s.send(new DatagramPacket(out, out.length, m, SyncNet.PORT));
     }
 

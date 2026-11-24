@@ -300,7 +300,7 @@ final class SyncCamera {
                 final int[] pi = md == PhotoBurst.MODE_SINGLE ? new int[0] : planIso;
                 StringBuilder pl = new StringBuilder();
                 for (int j = 0; j < pe.length; j++) pl.append(String.format(Locale.US, " + 1/%.0f s ISO %d", 1e9 / pe[j], pi[j]));
-                PhotoBurst b = new PhotoBurst(ctx, name, info + ", " + rawSize + ", " + PhotoBurst.MODES[md] + pl,
+                PhotoBurst b = new PhotoBurst(ctx, name, info + ", " + rawSize + ", " + PhotoBurst.MODES[md] + pl + ", " + focusInfo(),
                         seq, targetMaster, ab.periodNs, clock, chars, burstResults, rot, aspect, md, pe, pi, natural);
                 b.brightness = brightness;
                 b.outFormat = nightOut;
@@ -308,6 +308,7 @@ final class SyncCamera {
                 b.toneBus = toneBus;
                 b.toneRole = toneRole;
                 b.shortExpNs = Math.min(ab.exposureNs, ab.periodNs - EXPOSURE_MARGIN_NS);
+                b.shortIso = ab.iso;
                 b.takeFromRing(ring);
                 burst = b;
                 burstUi = b;
@@ -330,6 +331,8 @@ final class SyncCamera {
                             // block of run + REPEAT - 1 requests (the same slot safety, little extra time)
                             for (int[] run : PhotoBurst.requestRuns(pe, pi)) {
                                 int j = run[0];
+                                // item 34: frames like the stream's (Night / noise averaging) come from it
+                                if (PhotoBurst.sameAsStream(pe[j], pi[j], b.shortExpNs, b.shortIso)) continue;
                                 for (int r = 0; r < run[1]; r++) {
                                     session.capture(buildRequest(a, a.periodNs, "L" + j, pe[j], pi[j]), callback, handler);
                                 }
@@ -358,7 +361,7 @@ final class SyncCamera {
             photoRotation = rotationFor(deviceDegrees);
             photo = new PhotoCapture(ctx, name, info + ", " + photoSize()
                     + ", " + PhotoCapture.FORMATS[a.photoFormat] + (yuvReader != null ? " (in-app JPEG)" : "")
-                    + "\n" + wbInfo(),
+                    + "\n" + wbInfo() + "\n" + focusInfo(),
                     seq, targetMaster, clock, aspect);
             photo.setRaw(chars, photoRotation);
             photoWindow = true;
@@ -386,6 +389,7 @@ final class SyncCamera {
             photoStatus = "astro #" + seq + ": " + (rawReader == null ? "no RAW stream" : "busy");
             return;
         }
+        MergeCore.nightLook = false;
         long[] pe = planExp;
         int[] pi = planIso;
         if (pe.length == 0) {
@@ -699,6 +703,20 @@ final class SyncCamera {
      * into every photo's info file (2026-11-24: the colours of a Pixel 4 pair differed; the reason
      * could not be seen afterwards).
      */
+    private volatile float appliedFocusD = Float.NaN;
+    private volatile int appliedAfMode = -1;
+
+    /** "focus manual 1.20 m, lens 1.18 m (0.85 dpt)": requested by the CONTROL phone / used by the lens (item 38). */
+    String focusInfo() {
+        Look l = look;
+        String req = l == null ? "-" : l.focusManual ? "manual " + (l.diopters > 0.001f
+                ? String.format(java.util.Locale.US, "%.2f m", 1 / l.diopters) : "infinity") : "auto";
+        float d = appliedFocusD;
+        String lens = Float.isNaN(d) ? "?" : d > 0.001f
+                ? String.format(java.util.Locale.US, "%.2f m (%.2f dpt)", 1 / d, d) : "infinity (0 dpt)";
+        return "focus " + req + ", lens " + lens + (appliedAfMode == CaptureResult.CONTROL_AF_MODE_OFF ? ", AF off" : ", AF on");
+    }
+
     String wbInfo() {
         android.hardware.camera2.params.RggbChannelVector g = appliedGains;
         android.hardware.camera2.params.ColorSpaceTransform x = appliedXform;
@@ -1824,6 +1842,10 @@ final class SyncCamera {
         if (g != null) appliedGains = g;
         if (x != null) appliedXform = x;
         if (awb != null) appliedAwbOff = awb == CaptureResult.CONTROL_AWB_MODE_OFF;
+        Float lfd = result.get(CaptureResult.LENS_FOCUS_DISTANCE);     // item 38: focus in the info file
+        Integer afm = result.get(CaptureResult.CONTROL_AF_MODE);
+        if (lfd != null) appliedFocusD = lfd;
+        if (afm != null) appliedAfMode = afm;
         if (g != null && x != null && awb != null && awb != CaptureResult.CONTROL_AWB_MODE_OFF) {
             lastGains = g;                    // only values found by the automatic white balance
             lastXform = x;

@@ -826,8 +826,9 @@ public class SyncActivity extends Activity {
         if (!p) {
             for (int i = 0; i < landscapeViews.size(); i++) rightCol.addView(landscapeViews.get(i), landscapeParams.get(i));
         } else if (role != ROLE_CAMERA) {
-            rightCol.addView(tabs, new LinearLayout.LayoutParams(dp(140), -2));
-            rightCol.addView(new android.view.View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+            // the mode switch takes the width that is left: fixed widths (404 dp) pushed the gear off
+            // narrower screens (Beam Pro 360 dp, 2026-11-24); shutter / thumb / gear keep their size
+            rightCol.addView(tabs, new LinearLayout.LayoutParams(0, -2, 1f));
             // the shutter with its label below ("PHOTO #0143"; it was missing in portrait)
             if (shutterBox == null) {
                 shutterBox = new LinearLayout(this);
@@ -836,10 +837,9 @@ public class SyncActivity extends Activity {
             }
             shutterBox.addView(shutter, new LinearLayout.LayoutParams(dp(84), dp(84)));
             if (shutterLabel != null) shutterBox.addView(shutterLabel, new LinearLayout.LayoutParams(-2, -2));
-            rightCol.addView(shutterBox, new LinearLayout.LayoutParams(dp(120), -2));
-            rightCol.addView(new android.view.View(this), new LinearLayout.LayoutParams(0, 1, 1f));
-            rightCol.addView(thumb, new LinearLayout.LayoutParams(dp(80), dp(60)));
-            rightCol.addView(gearView, new LinearLayout.LayoutParams(dp(64), -2));
+            rightCol.addView(shutterBox, new LinearLayout.LayoutParams(dp(100), -2));
+            rightCol.addView(thumb, new LinearLayout.LayoutParams(dp(64), dp(48)));
+            rightCol.addView(gearView, new LinearLayout.LayoutParams(dp(56), -2));
         } else {
             rightCol.addView(rightInfo, new LinearLayout.LayoutParams(0, -2, 1f));
             rightCol.addView(thumb, new LinearLayout.LayoutParams(dp(90), dp(68)));
@@ -988,6 +988,17 @@ public class SyncActivity extends Activity {
             });
             return previewView;
         }
+        // CONTROL only (no camera): there is no image here - say where to tap (item 38)
+        previewView.setOnTouchListener((v, e) -> {
+            if (e.getAction() != android.view.MotionEvent.ACTION_UP) return true;
+            if (settingsPanel.getVisibility() == android.view.View.VISIBLE) {
+                settingsPanel.setVisibility(android.view.View.GONE);
+                return true;
+            }
+            showNote("Focus: tap the image on a camera phone - its distance is used by all phones "
+                    + "(or the Focus chip here: slider / auto).");
+            return true;
+        });
         return null;
     }
 
@@ -2293,7 +2304,7 @@ public class SyncActivity extends Activity {
 
     /** Darkest-half level for the HDR plan: the darkest phone (converted to the master's exposure). */
     private float jointRawDark() {
-        float d = syncCamera.rawDark;
+        float d = syncCamera != null ? syncCamera.rawDark : Float.NaN;   // CONTROL only: the camera phones'
         double lightM = master.exposureNs * (double) master.iso;
         for (MasterNode.ClientInfo c : aeClients()) {
             if (c.rawDark < 0 || Float.isNaN(c.rawDark)) continue;
@@ -2305,7 +2316,7 @@ public class SyncActivity extends Activity {
 
     /** Median level for the astro plan: the brightest phone (converted to the master's exposure). */
     private float jointRawMedian() {
-        float m = syncCamera.rawMedian;
+        float m = syncCamera != null ? syncCamera.rawMedian : Float.NaN;
         double lightM = master.exposureNs * (double) master.iso;
         for (MasterNode.ClientInfo c : aeClients()) {
             if (c.rawMedian < 0 || Float.isNaN(c.rawMedian)) continue;
@@ -2891,7 +2902,11 @@ public class SyncActivity extends Activity {
     private String computeHdrPlan() {
         planText = "";
         int hm = effHdrMode();
-        if (master.effFormat() != 3 || hm == PhotoBurst.MODE_SINGLE || syncCamera == null) return "-";
+        // CONTROL only (no camera of its own, 2026-11-24: Night / HDR plan was always empty): the plan from the
+        // camera phones' measurements; astro still needs the own camera's histogram
+        if (master.effFormat() != 3 || hm == PhotoBurst.MODE_SINGLE || (syncCamera == null && hm == PhotoBurst.MODE_ASTRO)) {
+            return "-";
+        }
         if (hm == PhotoBurst.MODE_ASTRO) return computeAstroPlan();
         float dark = jointRawDark();                    // joint: the darkest phone
         long e0 = Math.min(master.exposureNs, master.periodNs - SyncCamera.EXPOSURE_MARGIN_NS);
@@ -3140,6 +3155,24 @@ public class SyncActivity extends Activity {
         table = mono(13);
         table.setTextColor(0xFFD0D0D0);
         settingsContent.addView(table);
+        // item 38: tap to focus here too; the distance goes to the CONTROL phone, which sets it for all
+        previewView.setOnTouchListener((v, e) -> {
+            if (settingsPanel.getVisibility() == android.view.View.VISIBLE) {
+                if (e.getAction() == android.view.MotionEvent.ACTION_UP) settingsPanel.setVisibility(android.view.View.GONE);
+                return true;
+            }
+            if (e.getAction() != android.view.MotionEvent.ACTION_UP || syncCamera == null || camera == null) return true;
+            float u = e.getX() / previewView.getWidth(), w = e.getY() / previewView.getHeight();
+            showFocusSquare(e.getX(), e.getY(), 0);
+            syncCamera.tapFocus(u, w, displayRotationDeg(), (d, sharp) -> ui.post(() -> {
+                buzz(3);
+                showFocusSquare(Float.NaN, Float.NaN, sharp ? 1 : 2);
+                camera.focusTapD = d;
+                camera.focusTapSharp = sharp ? 1 : 0;
+                camera.focusSeq = (int) (SystemClock.elapsedRealtime() & 0x3fffffff) | 1;
+            }));
+            return true;
+        });
         return previewView;
     }
 
@@ -3898,6 +3931,17 @@ public class SyncActivity extends Activity {
         syncCameraToNode();
         master.updateReference(role == ROLE_MASTER_CAMERA ? aligner : null);
         master.checkLost();
+        // item 38: a tap focus on a camera phone -> that distance for all phones (like the CONTROL's own tap)
+        for (MasterNode.ClientInfo c : master.clients.values()) {
+            if (!c.focusNew) continue;
+            c.focusNew = false;
+            float d = c.focusD;
+            master.focusManual = true;
+            master.focusDiopters = d;
+            if (distEdit != null) distEdit.setText(d > 0.001f ? String.format(Locale.US, "%.2f", 1 / d) : "inf");
+            master.lookChanged(String.format(Locale.US, "tap focus on %s: %s%s", c.name, focusText(d),
+                    c.focusSharp ? "" : " (not sharp?)"));
+        }
 
         String conflict = sideConflict();
         header.setText("CONTROL" + (role == ROLE_MASTER_CAMERA ? " + " + Downloads.SIDE_NAMES[Downloads.side] + " camera" : "")

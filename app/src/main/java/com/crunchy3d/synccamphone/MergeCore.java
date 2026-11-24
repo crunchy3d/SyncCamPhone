@@ -993,10 +993,11 @@ final class MergeCore {
             }
         }
         int pcR = Integer.getInteger("pointColour", astro ? 6 : 0);
-        int clLev = Math.max(0, Math.min(CLARITY_AMOUNTS.length - 1, clarityLevel));
+        // item 34: Night photos (people) - local contrast off, sharpening at most Low (user test #151)
+        int clLev = nightLook ? 0 : Math.max(0, Math.min(CLARITY_AMOUNTS.length - 1, clarityLevel));
         float clarity = System.getProperty("clarity") != null ? Float.parseFloat(System.getProperty("clarity"))
                 : CLARITY_AMOUNTS[clLev];
-        int sl = Math.max(0, Math.min(SHARP_AMOUNTS.length - 1, sharpLevel));
+        int sl = Math.max(0, Math.min(SHARP_AMOUNTS.length - 1, nightLook ? Math.min(1, sharpLevel) : sharpLevel));
         boolean sharpOn = SHARP_AMOUNTS[sl] > 0 && !Boolean.getBoolean("noSharpen")
                 && !(astro && !Boolean.getBoolean("astroSharpen"));
         boolean lcOn = clarity > 0 && !astro;
@@ -1852,6 +1853,25 @@ final class MergeCore {
     static final double ROB_LO = Double.parseDouble(System.getProperty("robLo", "6.0"));   // robustness: sigma of the mean difference
     static final double ROB_HI = Double.parseDouble(System.getProperty("robHi", "12.0"));
     static final boolean CLIP_PIXEL = Boolean.getBoolean("clipPixel");   // step 4 test switch
+    // ITEM 34 (V0.106): NIGHT averaging of equal frames (people): stricter - a moving mouth / hand passed
+    // the 6/12 sigma + 2x structure test (a face's local structure is large); there the reference alone
+    // (a bit noisier, but sharp). Set by PhotoBurst for the JPEG / RAW Night mode.
+    static volatile boolean nightLook;
+    static final double NIGHT_ROB_LO = Double.parseDouble(System.getProperty("nightRobLo", "3.0"));
+    static final double NIGHT_ROB_HI = Double.parseDouble(System.getProperty("nightRobHi", "6.0"));
+    static final double NIGHT_ROB_STRUCT = Double.parseDouble(System.getProperty("nightRobStruct", "0.5"));
+
+    static double robLo() {
+        return nightLook ? NIGHT_ROB_LO : ROB_LO;
+    }
+
+    static double robHi() {
+        return nightLook ? NIGHT_ROB_HI : ROB_HI;
+    }
+
+    static double robStruct() {
+        return nightLook ? NIGHT_ROB_STRUCT : ROB_STRUCT;
+    }
     static final double ROB_STRUCT = Double.parseDouble(System.getProperty("robStruct", "2.0"));   // share of the local structure variance tolerated
 
 
@@ -2398,7 +2418,7 @@ final class MergeCore {
             IntStream.range(0, H2).parallel().forEach(y -> {
                 for (int x = 0; x < W2; x++) {
                     int i = y * W2 + x;
-                    final double st = nearClip[i] ? 0 : ROB_STRUCT;
+                    final double st = nearClip[i] ? 0 : robStruct();
                     double dsum = 0;
                     for (int c = 0; c < 3; c++) {
                         double mr = m3(refPl[c], x, y), mf = m3(fPl[c], x, y);
@@ -2432,7 +2452,7 @@ final class MergeCore {
                         }
                         dd = Math.max(dd, Math.sqrt(qsum / 3));
                     }
-                    rob[i] = (float) Math.min(1, Math.max(0, (ROB_HI - dd) / (ROB_HI - ROB_LO)));
+                    rob[i] = (float) Math.min(1, Math.max(0, (robHi() - dd) / (robHi() - robLo())));
                 }
             });
             if (Boolean.getBoolean("robStats")) {            // bench diagnostics: accepted share, median distance
@@ -2594,7 +2614,7 @@ final class MergeCore {
                 double vr = (rS * Math.max(0, mr) / RR + rO) * RR * RR;
                 double vf = (kS * Math.max(0, mf) * rk / RR + kO) * RR * RR / (rk * rk);
                 double vn = (vr + vf) / 9.0, vs = Math.max(0, v3(rp[c], x, y, mr) - vr);
-                dsum += d * d / (vn + ROB_STRUCT * vs);
+                dsum += d * d / (vn + robStruct() * vs);
             }
             s[n++] = (float) Math.sqrt(dsum / 3);
         }

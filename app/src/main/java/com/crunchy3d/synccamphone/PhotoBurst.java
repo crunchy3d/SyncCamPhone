@@ -239,11 +239,54 @@ final class PhotoBurst {
     }
 
     private long end() {
-        return planExp.length == 0 ? hi()
-                : targetMaster + Math.round((tslot[planExp.length - 1] + REPEAT + 0.5) * periodNs);
+        if (planExp.length == 0) return hi();
+        long mx = Long.MIN_VALUE;
+        for (long t : tslot) mx = Math.max(mx, t);
+        return targetMaster + Math.round((mx + REPEAT + 0.5) * periodNs);
+    }
+
+    /** Earliest frame kept: the ring frames before T when averaging frames come from the stream. */
+    private long first() {
+        return anyRefLike ? lo() - NEAR_BEFORE * periodNs : lo();
     }
 
     long shortExpNs;                          // exposure of the base frames (slot of a frame = its exposure end)
+    int shortIso;                             // ISO of the base frames
+
+    // ITEM 34 (V0.106): averaging (Night / noise) frames with the reference's own exposure + ISO are NOT
+    // requested after the press any more (they landed 9+ frames = 0.3 s later: moving faces smeared):
+    // the running RAW stream already has them -> the NEIGHBOURS of the reference, from the ring
+    // (before the press) and live: slots -1, +1, -2, +2, -3, +3, +4, +5 ...
+    static final int NEAR_BEFORE = 3;         // the ring (8 frames) holds at least these before T
+    private boolean anyRefLike;
+
+    /** Plan entry j has the reference's settings (comes from the stream). */
+    private boolean refLikeEntry(int j) {
+        return shortExpNs > 0 && shortIso > 0 && Math.abs(planExp[j] - shortExpNs) <= shortExpNs * 0.15
+                && Math.abs(planIso[j] - shortIso) <= shortIso * 0.2;
+    }
+
+    /** Called once shortExpNs / shortIso are known: neighbour slots for the reference-like entries. */
+    private void planNeighbours() {
+        MergeCore.nightLook = outFormat >= 0;      // JPEG / RAW Night: strict motion test, gentle look
+        int n = 0;
+        for (int j = 0; j < planExp.length; j++) {
+            if (!refLikeEntry(j)) continue;
+            anyRefLike = true;
+            tslot[j] = neighbourSlot(n++);
+        }
+    }
+
+    /** n-th neighbour of slot 0: -1, +1, -2, +2, ... down to -NEAR_BEFORE, then only later frames. */
+    static long neighbourSlot(int n) {
+        if (n < 2 * NEAR_BEFORE) return n % 2 == 0 ? -(n / 2 + 1) : n / 2 + 1;
+        return n - NEAR_BEFORE + 1;
+    }
+
+    /** The requests needed: only entries that differ from the stream (reference) settings. */
+    static boolean sameAsStream(long pe, int pi, long shortExp, int shortIso) {
+        return Math.abs(pe - shortExp) <= shortExp * 0.15 && Math.abs(pi - shortIso) <= shortIso * 0.2;
+    }
 
     /** Frame slot (periods after T) of a frame of plan entry j: by the END of its exposure. */
     private long slotOf(long tm, int j) {
@@ -283,6 +326,7 @@ final class PhotoBurst {
 
     /** Takes the matching frames from the ring (the rest of the ring is closed). */
     void takeFromRing(Ring ring) {
+        planNeighbours();
         while (!ring.q.isEmpty()) offer(ring.q.pollFirst());
     }
 
@@ -512,7 +556,7 @@ final class PhotoBurst {
         long tm = clock.toMaster(img.getTimestamp());
         if (tm != Long.MIN_VALUE) lastSeenMaster = Math.max(lastSeenMaster, tm);
         retryPending();
-        if (tm == Long.MIN_VALUE || finished || tm < lo() || tm > end()) {
+        if (tm == Long.MIN_VALUE || finished || tm < first() || tm > end()) {
             img.close();
             return true;
         }

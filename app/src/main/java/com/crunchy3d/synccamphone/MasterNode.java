@@ -21,6 +21,9 @@ final class MasterNode {
 
     static final class ClientInfo {
         String id, name;
+        int focusSeq;                     // item 38: tap focus on this camera phone
+        volatile float focusD;
+        volatile boolean focusSharp, focusNew;
         InetAddress address;
         int port;
         volatile long lastSeenMs;
@@ -479,6 +482,18 @@ final class MasterNode {
             }
         }
         if (f.length > 36) c.lens = Integer.parseInt(f[36]);
+        if (f.length > 39) {
+            int fs = Integer.parseInt(f[37]);
+            if (fs != c.focusSeq) {
+                boolean first = c.focusSeq == 0 && c.lastSeenMs == 0;
+                c.focusSeq = fs;
+                if (fs != 0 && !first) {
+                    c.focusD = Float.parseFloat(f[38]);
+                    c.focusSharp = "1".equals(f[39]);
+                    c.focusNew = true;
+                }
+            }
+        }
         c.lastSeenMs = SystemClock.elapsedRealtime();
         if (running) {
             if (c.phaseValid && !id.equals(refId)) points.add(new Point(c.name, c.lastSeenMs, c.phaseUs));

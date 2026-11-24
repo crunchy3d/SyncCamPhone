@@ -10,7 +10,7 @@ final class App {
     private App() {}
 
     static final String NAME = "SyncCamPhone";
-    static final String VERSION = "V0.105";
+    static final String VERSION = "V0.106";
     static final String TITLE = NAME + " " + VERSION;
     /** Files go to Download/SyncCamPhone; the old folder is still read for the file numbering. */
     static final String FOLDER = NAME, OLD_FOLDER = "CamSyncProbe";

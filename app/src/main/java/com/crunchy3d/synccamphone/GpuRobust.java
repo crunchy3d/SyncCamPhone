@@ -670,9 +670,9 @@ final class GpuRobust implements MergeCore.Gpu {
         u(pRob, "kO2", (float) kO2);
         u(pRob, "RR", (float) RR);
         u(pRob, "rk", rk);
-        u(pRob, "ROB_STRUCT", (float) MergeCore.ROB_STRUCT);
-        u(pRob, "ROB_LO", (float) MergeCore.ROB_LO);
-        u(pRob, "ROB_HI", (float) MergeCore.ROB_HI);
+        u(pRob, "ROB_STRUCT", (float) MergeCore.robStruct());
+        u(pRob, "ROB_LO", (float) MergeCore.robLo());
+        u(pRob, "ROB_HI", (float) MergeCore.robHi());
         dispatch2();
         // robustPost: erosion (near clipped parts: the quad's own value), blur, near clipped parts
         // capped by the eroded value
