@@ -1,0 +1,16 @@
+# build output
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+
+# local files
+local.properties
+*.iml
+.idea/
+.vscode/
+__pycache__/
+
+# manual: source screenshots are not published (img/ holds the annotated copies)
+docs/manual/shots/
