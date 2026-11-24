@@ -1,9 +1,14 @@
 """SyncCamPhone user manual (PDF, ReportLab).
 
-Usage: python docs/manual/annotate.py      (screenshots -> docs/manual/img)
-       python docs/manual/make_manual.py   -> docs/SyncCamPhone_User_Manual.pdf
+Usage: python docs/manual/annotate.py            (screenshots -> docs/manual/img)
+       python docs/manual/make_manual.py         -> English manual
+       python docs/manual/make_manual.py de      -> German (lang/de.json); also fr, nl, sl
+       python docs/manual/make_manual.py all     -> all languages
+       python docs/manual/make_manual.py extract -> lang/strings_en.json (all English strings)
 Authors: Damir Vrancic and Claude
 """
+import json
+import sys
 from pathlib import Path
 
 from reportlab.graphics.shapes import Drawing, String, Circle
@@ -20,14 +25,34 @@ from reportlab.platypus.tableofcontents import TableOfContents
 
 HERE = Path(__file__).resolve().parent
 IMG = HERE / 'img'
-OUT = HERE.parent / 'SyncCamPhone_User_Manual_V0_104.pdf'
+OUT_BASE = 'SyncCamPhone_User_Manual_V0_105'
+LANGS = ['de', 'fr', 'nl', 'sl']
+TR = {}          # English -> translation of the current language
+SEEN = []        # English strings in build order (extract mode)
+MISSING = []
+CUR = {'lang': 'en'}  # translations are longer: some pictures a bit smaller
+
+
+def t(s):
+    """Translate one text (the exact English string is the key)."""
+    if not s:
+        return s
+    if s not in SEEN:
+        SEEN.append(s)
+    if not TR:
+        return s
+    v = TR.get(s)
+    if v is None:
+        MISSING.append(s)
+        return s
+    return v
 FONTS = Path('C:/Windows/Fonts')
 pdfmetrics.registerFont(TTFont('Body', str(FONTS / 'calibri.ttf')))
 pdfmetrics.registerFont(TTFont('Body-B', str(FONTS / 'calibrib.ttf')))
 pdfmetrics.registerFont(TTFont('Body-I', str(FONTS / 'calibrii.ttf')))
 pdfmetrics.registerFontFamily('Body', normal='Body', bold='Body-B', italic='Body-I', boldItalic='Body-B')
 
-VERSION = 'Version V0.104 – November 2026'
+VERSION = 'Version V0.105 – November 2026'
 INK = colors.HexColor('#1F2933')
 ACCENT = colors.HexColor('#1F5A96')
 MUTED = colors.HexColor('#5F6B7A')
@@ -64,28 +89,28 @@ class H1(Paragraph):
 
 
 def h1(text):
-    return H1(text, S['h1'])
+    return H1(t(text), S['h1'])
 
 
 def P(text, st='body'):
-    return Paragraph(text, S[st])
+    return Paragraph(t(text), S[st])
 
 
 def bullets(items):
-    return [Paragraph(t, S['bullet'], bulletText='\u2022') for t in items]
+    return [Paragraph(t(x), S['bullet'], bulletText='\u2022') for x in items]
 
 
 def steps(items):
-    return [Paragraph(t, S['step'], bulletText='%d.' % (i + 1)) for i, t in enumerate(items)]
+    return [Paragraph(t(x), S['step'], bulletText='%d.' % (i + 1)) for i, x in enumerate(items)]
 
 
 def box(flowables, bg=NOTE_BG, label=None):
-    inner = ([P('<b>%s</b>' % label)] if label else []) + flowables
-    t = Table([[inner]], colWidths=[TEXT_W])
-    t.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), bg), ('LEFTPADDING', (0, 0), (-1, -1), 9),
+    inner = ([Paragraph('<b>%s</b>' % t(label), S['body'])] if label else []) + flowables
+    tb = Table([[inner]], colWidths=[TEXT_W])
+    tb.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), bg), ('LEFTPADDING', (0, 0), (-1, -1), 9),
                            ('RIGHTPADDING', (0, 0), (-1, -1), 9), ('TOPPADDING', (0, 0), (-1, -1), 7),
                            ('BOTTOMPADDING', (0, 0), (-1, -1), 4)]))
-    return KeepTogether([Spacer(1, 2 * mm), t, Spacer(1, 3 * mm)])
+    return KeepTogether([Spacer(1, 2 * mm), tb, Spacer(1, 3 * mm)])
 
 
 def tip(*paras):
@@ -97,16 +122,16 @@ def warn(*paras):
 
 
 def table(rows, widths, head=True, bold_first=True):
-    data = [[Paragraph(str(c), S['cellb' if (head and r == 0) or (bold_first and c_i == 0) else 'cell'])
+    data = [[Paragraph(t(str(c)), S['cellb' if (head and r == 0) or (bold_first and c_i == 0) else 'cell'])
              for c_i, c in enumerate(row)] for r, row in enumerate(rows)]
-    t = Table(data, colWidths=[w * mm for w in widths], repeatRows=1 if head else 0)
+    tb = Table(data, colWidths=[w * mm for w in widths], repeatRows=1 if head else 0)
     st = [('VALIGN', (0, 0), (-1, -1), 'TOP'), ('LINEBELOW', (0, 0), (-1, -1), 0.4, RULE),
           ('LEFTPADDING', (0, 0), (-1, -1), 5), ('RIGHTPADDING', (0, 0), (-1, -1), 5),
           ('TOPPADDING', (0, 0), (-1, -1), 3.5), ('BOTTOMPADDING', (0, 0), (-1, -1), 3.5)]
     if head:
         st += [('BACKGROUND', (0, 0), (-1, 0), NOTE_BG), ('LINEBELOW', (0, 0), (-1, 0), 0.8, ACCENT)]
-    t.setStyle(TableStyle(st))
-    return t
+    tb.setStyle(TableStyle(st))
+    return tb
 
 
 def img(name, width):
@@ -135,12 +160,12 @@ def button_colours():
     d = Drawing(TEXT_W, 70)
     items = [('#2E7D32', '1/1', 'all camera phones in sync'), ('#F9A825', '1/2', 'some in sync'),
              ('#D32F2F', '0/1', 'none in sync')]
-    for i, (c, n, t) in enumerate(items):
+    for i, (c, n, txt) in enumerate(items):
         x = 40 + i * 165
         d.add(Circle(x, 38, 25, fillColor=colors.HexColor(c), strokeColor=colors.white, strokeWidth=2.5))
         d.add(String(x, 41, '3D', fontName='Body-B', fontSize=11, fillColor=colors.white, textAnchor='middle'))
         d.add(String(x, 29, n, fontName='Body', fontSize=9, fillColor=colors.white, textAnchor='middle'))
-        d.add(String(x + 33, 35, t, fontName='Body', fontSize=10, fillColor=INK))
+        d.add(String(x + 33, 35, t(txt), fontName='Body', fontSize=10, fillColor=INK))
     return d
 
 
@@ -155,7 +180,7 @@ def on_page(c, doc):
     c.saveState()
     c.setFont('Body', 8.5)
     c.setFillColor(MUTED)
-    c.drawString(20 * mm, 12 * mm, 'SyncCamPhone V0.104 \u2013 User Manual')
+    c.drawString(20 * mm, 12 * mm, t('SyncCamPhone V0.105 \u2013 User Manual'))
     c.drawRightString(190 * mm, 12 * mm, str(doc.page))
     c.setStrokeColor(RULE)
     c.setLineWidth(0.5)
@@ -306,17 +331,17 @@ def ch_main():
         h1('3. The main screen'),
         P('Hold the phones in landscape. Everything is operated from the CONTROL phone; the camera phones show '
           'their own picture and status.'),
-        pic('master_photo', head='3.1 CONTROL phone', caption='CONTROL phone in photo mode.'),
+        pic('master_photo', head='3.1 CONTROL phone', width=TEXT_W if CUR['lang'] == 'en' else 150 * mm, caption='CONTROL phone in photo mode.'),
         legend(master_rows),
         PageBreak(),
-        pic('camera_photo', head='3.2 Camera phone', width=140 * mm, caption='Camera phone (follows the CONTROL phone).'),
+        pic('camera_photo', head='3.2 Camera phone', width=140 * mm if CUR['lang'] == 'en' else 110 * mm, caption='Camera phone (follows the CONTROL phone).'),
         legend(cam_rows),
         P('3.3 Sliders', 'h2'),
         P('Tap the exposure, ISO, white balance or focus chip to get a slider. The new value goes to all phones '
           'when you lift the finger. Exposure and ISO change without restarting the cameras, so the sync stays '
           'green. White balance and focus sliders also have an <b>auto</b> button. The Back key closes the '
           'slider without a change.'),
-        pic('master_slider', width=95 * mm, caption='Exposure slider (video mode).'),
+        pic('master_slider', width=95 * mm if CUR['lang'] == 'en' else 75 * mm, caption='Exposure slider (video mode).'),
         P('3.4 Standby', 'h2'),
         P('After a time without use (120 s by default, see SYSTEM settings) or with the moon button, all cameras '
           'switch off. The CONTROL phone shows <b>tap to wake</b>, the camera phones <b>tap the CONTROL phone to '
@@ -540,6 +565,10 @@ def ch_settings():
                                                              '(about 300 MB per photo).'],
                    ['GPU merge', 'Off, <b>On</b>, Check', 'Merging on the graphics chip (several times '
                                                           'faster). Check: for testing only.'],
+                   ['Anti-flicker', '<b>Off</b>, 50 Hz, 60 Hz', 'Against stripes under mains lamps: exposures of '
+                                                               '10 ms (60 Hz: 8.3 ms) or longer become whole steps '
+                                                               '(10, 20, 30 ms), the ISO keeps the brightness. Choose '
+                                                               'the mains frequency of your country.'],
                    ['Remote trigger', 'button', 'Chapter 8.'],
                    ['Sync test (LED)', 'Frame alignment, LED capture', 'Technical timing tests. Keep Frame '
                                                                        'alignment <b>On</b>.'],
@@ -664,16 +693,22 @@ def ch_appendix():
             ['', 'Codec / Conform to 30 fps / Sound offset', 'H.264 / on / auto'],
             ['WB · TONE · FOCUS', 'White balance / Tone / Focus', 'auto shared / standard / auto'],
             ['SYSTEM', 'Standby after s / Photo JPEG', '120 / camera'],
-            ['', 'Burst single DNGs / GPU merge / Frame alignment', 'off / On / On']]
+            ['', 'Burst single DNGs / GPU merge / Anti-flicker / Frame alignment', 'off / On / Off / On']]
     return [h1('11. Appendix: default settings'), table(rows, [35, 80, 55], bold_first=True),
             Spacer(1, 8 * mm),
-            P('SyncCamPhone – Damir Vrancic and Claude, ' + VERSION + '.', 'small')]
+            Paragraph('SyncCamPhone – Damir Vrancic and Claude, ' + t(VERSION) + '.', S['small'])]
 
 
-def main():
-    doc = Doc(str(OUT), pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=18 * mm,
-              bottomMargin=20 * mm, title='SyncCamPhone User Manual', author='Damir Vrancic and Claude',
-              subject='Synchronised stereo photos and videos with Android phones')
+def build(lang):
+    TR.clear()
+    CUR['lang'] = lang
+    del MISSING[:]
+    out = HERE.parent / (OUT_BASE + ('' if lang == 'en' else '_' + lang.upper()) + '.pdf')
+    if lang != 'en':
+        TR.update(json.load(open(HERE / 'lang' / (lang + '.json'), encoding='utf-8')))
+    doc = Doc(str(out), pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=18 * mm,
+              bottomMargin=20 * mm, title=t('SyncCamPhone User Manual'), author='Damir Vrancic and Claude',
+              subject=t('Synchronised stereo photos and videos with Android phones'), lang=lang)
     fr = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id='f')
     doc.addPageTemplates([PageTemplate('cover', [fr], onPage=on_cover, autoNextPageTemplate='page'),
                           PageTemplate('page', [fr], onPage=on_page, autoNextPageTemplate='page')])
@@ -683,7 +718,22 @@ def main():
         story += ch() + [PageBreak()]
     story.pop()
     doc.multiBuild(story)
-    print(OUT)
+    if TR:  # untranslated strings stay English (names shown in the app are kept on purpose)
+        print('  %d strings kept in English' % len(dict.fromkeys(MISSING)))
+    print(out)
+
+
+def main():
+    arg = sys.argv[1] if len(sys.argv) > 1 else 'en'
+    if arg == 'extract':
+        build('en')
+        (HERE / 'lang').mkdir(exist_ok=True)
+        json.dump(SEEN, open(HERE / 'lang' / 'strings_en.json', 'w', encoding='utf-8'), ensure_ascii=False,
+                  indent=0)
+        print(len(SEEN), 'strings')
+        return
+    for lang in (['en'] + LANGS if arg == 'all' else [arg]):
+        build(lang)
 
 
 if __name__ == '__main__':
