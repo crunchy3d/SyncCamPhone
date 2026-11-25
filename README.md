@@ -38,8 +38,9 @@ timing - **Probe (camera tests) -> Timing test** in the app tells you.
 
 Read the **[User Manual (PDF)](docs/SyncCamPhone_User_Manual_V0_106.pdf)** before the first use. Also in
 [German](docs/SyncCamPhone_User_Manual_V0_106_DE.pdf), [French](docs/SyncCamPhone_User_Manual_V0_106_FR.pdf),
-[Dutch](docs/SyncCamPhone_User_Manual_V0_106_NL.pdf) and [Slovene](docs/SyncCamPhone_User_Manual_V0_106_SL.pdf)
-(the app itself is in English; the manuals keep its button and setting names in English).
+[Dutch](docs/SyncCamPhone_User_Manual_V0_106_NL.pdf), [Slovene](docs/SyncCamPhone_User_Manual_V0_106_SL.pdf),
+[Chinese (Simplified)](docs/SyncCamPhone_User_Manual_V0_106_ZH.pdf) and
+[Japanese](docs/SyncCamPhone_User_Manual_V0_106_JA.pdf) (the app itself is in English; the manuals keep its button and setting names in English).
 
 ## Quick start
 
