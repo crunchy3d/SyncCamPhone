@@ -38,7 +38,7 @@ timing - **Probe (camera tests) -> Timing test** in the app tells you.
 
 **Or install from a PC over USB** (useful when the phone refuses the downloaded APK, or for several phones):
 download the APK on the PC, open the **[APK Installer (WebUSB)](https://crunchy3d.github.io/webusb-apk-installer/)**
-in Chrome or Edge, connect the phone with a USB data cable and follow the steps on the page (it explains how to
+(by the same authors) in Chrome or Edge, connect the phone with a USB data cable and follow the steps on the page (it explains how to
 turn on USB debugging). Nothing needs to be installed on the PC, and the APK goes only to the phone
 ([source and offline version](https://github.com/crunchy3d/webusb-apk-installer)).
 
