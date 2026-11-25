@@ -26,7 +26,7 @@ from reportlab.platypus.tableofcontents import TableOfContents
 HERE = Path(__file__).resolve().parent
 IMG = HERE / 'img'
 OUT_BASE = 'SyncCamPhone_User_Manual_V0_106'
-LANGS = ['de', 'fr', 'nl', 'sl']
+LANGS = ['de', 'fr', 'nl', 'sl', 'zh', 'ja']
 TR = {}          # English -> translation of the current language
 SEEN = []        # English strings in build order (extract mode)
 MISSING = []
@@ -47,10 +47,87 @@ def t(s):
         return s
     return v
 FONTS = Path('C:/Windows/Fonts')
-pdfmetrics.registerFont(TTFont('Body', str(FONTS / 'calibri.ttf')))
-pdfmetrics.registerFont(TTFont('Body-B', str(FONTS / 'calibrib.ttf')))
-pdfmetrics.registerFont(TTFont('Body-I', str(FONTS / 'calibrii.ttf')))
-pdfmetrics.registerFontFamily('Body', normal='Body', bold='Body-B', italic='Body-I', boldItalic='Body-B')
+# body fonts per language: Calibri; Chinese (Simplified) Microsoft YaHei, Japanese Yu Gothic (no italic in
+# these: the regular face); registered under the same names, so the styles stay unchanged
+FONT_FILES = {'en': ('calibri.ttf', 'calibrib.ttf', 'calibrii.ttf'),
+              'zh': ('msyh.ttc', 'msyhbd.ttc', 'msyh.ttc'),
+              'ja': ('YuGothM.ttc', 'YuGothB.ttc', 'YuGothM.ttc')}
+CJK = ('zh', 'ja')
+
+
+def _patch_cjk_wrap():
+    """Chinese / Japanese line breaks (kinsoku), patched at run time (ReportLab itself unchanged):
+    ReportLab's list of characters that may not start a line lacks the full-width ，；：！？ etc., and it
+    hangs only ONE such character (in "）。" the "。" started the next line), and it may end a line with
+    "（" or "“". Here: the list is completed, up to two such characters hang at the line end, and a line
+    never ends on an opening bracket or quote - in both line breakers (cjkFragSplit for paragraphs with
+    bold parts, dumbSplit for plain ones)."""
+    import inspect
+    import reportlab.lib.textsplit as ts
+    import reportlab.platypus.paragraph as para
+    start = ts.ALL_CANNOT_START + u'，；：！？）”’、。」』】ー'
+    end = ts.ALL_CANNOT_END + u'（“‘「『【'
+    ts.ALL_CANNOT_START = para.ALL_CANNOT_START = start
+    rule = """            if not lineBreak:
+                n = 0
+                while i<nU and U[i] in ALL_CANNOT_START and n<2:
+                    extraSpace -= U[i].width
+                    i += 1
+                    n += 1
+                if n==0 and i-1>lineStartPos+1 and U[i-1] in _CANNOT_END:
+                    extraSpace += U[i-1].width
+                    i -= 1
+"""
+    ok = 0
+    rule_plain = (rule.replace('if not lineBreak:', 'if True:')
+                  .replace('U[i].width', 'widths[i]').replace('U[i-1].width', 'widths[i-1]')
+                  .replace('U[i]', 'word[i]').replace('U[i-1]', 'word[i-1]').replace('nU', 'nW'))
+    for mod, fname, anchor, code in (
+            (para, 'cjkFragSplit', '            lines.append(makeCJKParaLine(U[lineStartPos:i],maxWidth,'
+                                   'widthUsed,extraSpace,lineBreak,calcBounds))\n', rule),
+            (ts, 'dumbSplit', '            lines.append([extraSpace, word[lineStartPos:i].strip()])\n', rule_plain)):
+        src = inspect.getsource(getattr(mod, fname))
+        if anchor not in src:
+            continue
+        ns = dict(vars(mod))
+        ns['_CANNOT_END'] = end
+        ns['ALL_CANNOT_START'] = start
+        exec(compile(src.replace(anchor, code + anchor), mod.__file__, 'exec'), ns)
+        setattr(mod, fname, ns[fname])
+        ok += 1
+    # wordSplit (in textsplit) calls dumbSplit through its module globals: patched above
+    return ok == 2
+
+
+CJK_PATCHED = _patch_cjk_wrap()
+
+
+FONT = {'': 'Body'}                           # current body font family name (F('-B') = its bold)
+
+
+def F(style=''):
+    """Font name of the current language: F() regular, F('-B') bold, F('-I') italic."""
+    return FONT[''] + style
+
+
+def set_fonts(lang):
+    """Each font set under its own names (Body, Body_zh, Body_ja): ReportLab keeps the first font
+    registered under a name, so re-registering "Body" in one run (make_manual.py all) did not work."""
+    files = FONT_FILES.get(lang, FONT_FILES['en'])
+    fam = 'Body' if lang not in FONT_FILES or lang == 'en' else 'Body_' + lang
+    if fam not in pdfmetrics.getRegisteredFontNames():
+        for sfx, f in zip(('', '-B', '-I'), files):
+            pdfmetrics.registerFont(TTFont(fam + sfx, str(FONTS / f), subfontIndex=0) if f.endswith('.ttc')
+                                    else TTFont(fam + sfx, str(FONTS / f)))
+        pdfmetrics.registerFontFamily(fam, normal=fam, bold=fam + '-B', italic=fam + '-I', boldItalic=fam + '-B')
+    FONT[''] = fam
+    for st in S.values():
+        if not hasattr(st, 'baseFont'):
+            st.baseFont = st.fontName             # 'Body', 'Body-B' or 'Body-I'
+        st.fontName = st.baseFont.replace('Body', fam, 1)
+        st.wordWrap = 'CJK' if lang in CJK else None    # Chinese / Japanese: breaks between characters
+
+
 
 VERSION = 'Version V0.106 – November 2026'
 INK = colors.HexColor('#1F2933')
@@ -163,9 +240,9 @@ def button_colours():
     for i, (c, n, txt) in enumerate(items):
         x = 40 + i * 165
         d.add(Circle(x, 38, 25, fillColor=colors.HexColor(c), strokeColor=colors.white, strokeWidth=2.5))
-        d.add(String(x, 41, '3D', fontName='Body-B', fontSize=11, fillColor=colors.white, textAnchor='middle'))
-        d.add(String(x, 29, n, fontName='Body', fontSize=9, fillColor=colors.white, textAnchor='middle'))
-        d.add(String(x + 33, 35, t(txt), fontName='Body', fontSize=10, fillColor=INK))
+        d.add(String(x, 41, '3D', fontName=F('-B'), fontSize=11, fillColor=colors.white, textAnchor='middle'))
+        d.add(String(x, 29, n, fontName=F(), fontSize=9, fillColor=colors.white, textAnchor='middle'))
+        d.add(String(x + 33, 35, t(txt), fontName=F(), fontSize=10, fillColor=INK))
     return d
 
 
@@ -178,7 +255,7 @@ class Doc(BaseDocTemplate):
 
 def on_page(c, doc):
     c.saveState()
-    c.setFont('Body', 8.5)
+    c.setFont(F(), 8.5)
     c.setFillColor(MUTED)
     c.drawString(20 * mm, 12 * mm, t('SyncCamPhone V0.106 \u2013 User Manual'))
     c.drawRightString(190 * mm, 12 * mm, str(doc.page))
@@ -703,6 +780,7 @@ def ch_appendix():
 
 
 def build(lang):
+    set_fonts(lang)
     TR.clear()
     CUR['lang'] = lang
     del MISSING[:]
