@@ -7,6 +7,10 @@ a common clock over Wi-Fi and take each photo, and record each video frame, at t
 within a few hundredths of a millisecond. The left and right files can then be combined into 3D photos or
 videos with any stereo software (for example with [StereoMate](https://github.com/crunchy3d/StereoMate/)).
 
+![Two Pixel 7a on a stereo bar, both showing a green SYNC of about 20 µs](docs/synched_phones.jpg)
+
+*Two Pixel 7a on a stereo bar, synchronised within about 20 µs (left: CONTROL + CAMERA, right: CAMERA).*
+
 ![CONTROL phone in photo mode](docs/screenshot.jpg)
 
 ## Features
@@ -15,7 +19,9 @@ videos with any stereo software (for example with [StereoMate](https://github.co
 - **HDR** and automatic **Night** averaging, merged on the phone (GPU)
 - **Astro**: long exposure series (up to 16 s frames) on a tripod
 - **Time-lapse**: synchronised stereo photos at a fixed interval
-- **Stereo video** up to 4K, frame-locked between the phones, with sound; VBR or CBR
+- **Stereo video** up to 4K, frame-locked between the phones, with sound; VBR or CBR; a lost camera frame is
+  reported (or optionally filled), so both eyes keep the same frame count
+- **Viewer**: swipe through the photos and videos of each phone, with zoom and video playback
 - **Anti-flicker** (50 / 60 Hz) against stripes under mains lamps, in photos and videos
 - **Lenses**: main, ultra-wide (video) and front camera, chosen on the CONTROL phone
 - **MONO** mode for a single phone
@@ -30,7 +36,7 @@ timing - **Probe (camera tests) -> Timing test** in the app tells you.
 
 ## Download and install
 
-1. Download `SyncCamPhone_V0_106.apk` from the [Releases](../../releases) page on each phone.
+1. Download `SyncCamPhone_V0_107.apk` from the [Releases](../../releases) page on each phone.
 2. Download it with **Chrome** and open it from Chrome's download message; allow Chrome to "install unknown
    apps" when Android asks. (Opening the APK in Files by Google or Firefox may end with "The app wasn't
    installed" on some phones.)
@@ -42,11 +48,14 @@ download the APK on the PC, open the **[APK Installer (WebUSB)](https://crunchy3
 turn on USB debugging). Nothing needs to be installed on the PC, and the APK goes only to the phone
 ([source and offline version](https://github.com/crunchy3d/webusb-apk-installer)).
 
-Read the **[User Manual (PDF)](docs/SyncCamPhone_User_Manual_V0_106.pdf)** before the first use. Also in
-[German](docs/SyncCamPhone_User_Manual_V0_106_DE.pdf), [French](docs/SyncCamPhone_User_Manual_V0_106_FR.pdf),
-[Dutch](docs/SyncCamPhone_User_Manual_V0_106_NL.pdf), [Slovene](docs/SyncCamPhone_User_Manual_V0_106_SL.pdf),
-[Chinese (Simplified)](docs/SyncCamPhone_User_Manual_V0_106_ZH.pdf) and
-[Japanese](docs/SyncCamPhone_User_Manual_V0_106_JA.pdf) (the app itself is in English; the manuals keep its button and setting names in English).
+Development test versions (newer, but less tested than the releases) are available at
+[mega.nz](https://mega.nz/folder/q6BygQKC#CWpQsq2VRka-N665Amcztg).
+
+Read the **[User Manual (PDF)](docs/SyncCamPhone_User_Manual_V0_107.pdf)** before the first use. Also in
+[German](docs/SyncCamPhone_User_Manual_V0_107_DE.pdf), [French](docs/SyncCamPhone_User_Manual_V0_107_FR.pdf),
+[Dutch](docs/SyncCamPhone_User_Manual_V0_107_NL.pdf), [Slovene](docs/SyncCamPhone_User_Manual_V0_107_SL.pdf),
+[Chinese (Simplified)](docs/SyncCamPhone_User_Manual_V0_107_ZH.pdf) and
+[Japanese](docs/SyncCamPhone_User_Manual_V0_107_JA.pdf) (the app itself is in English; the manuals keep its button and setting names in English).
 
 ## Quick start
 
