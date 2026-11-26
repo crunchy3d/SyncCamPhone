@@ -25,7 +25,7 @@ from reportlab.platypus.tableofcontents import TableOfContents
 
 HERE = Path(__file__).resolve().parent
 IMG = HERE / 'img'
-OUT_BASE = 'SyncCamPhone_User_Manual_V0_106'
+OUT_BASE = 'SyncCamPhone_User_Manual_V0_107'
 LANGS = ['de', 'fr', 'nl', 'sl', 'zh', 'ja']
 TR = {}          # English -> translation of the current language
 SEEN = []        # English strings in build order (extract mode)
@@ -129,7 +129,7 @@ def set_fonts(lang):
 
 
 
-VERSION = 'Version V0.106 – November 2026'
+VERSION = 'Version V0.107 – November 2026'
 INK = colors.HexColor('#1F2933')
 ACCENT = colors.HexColor('#1F5A96')
 MUTED = colors.HexColor('#5F6B7A')
@@ -257,7 +257,7 @@ def on_page(c, doc):
     c.saveState()
     c.setFont(F(), 8.5)
     c.setFillColor(MUTED)
-    c.drawString(20 * mm, 12 * mm, t('SyncCamPhone V0.106 \u2013 User Manual'))
+    c.drawString(20 * mm, 12 * mm, t('SyncCamPhone V0.107 \u2013 User Manual'))
     c.drawRightString(190 * mm, 12 * mm, str(doc.page))
     c.setStrokeColor(RULE)
     c.setLineWidth(0.5)
@@ -300,6 +300,8 @@ def ch_intro():
         P('The phones agree on a common clock over Wi-Fi. For video, every camera keeps its frames in step '
           'with the others. For photos, every phone uses the camera frame closest to the same moment. '
           'Typical differences between the phones are a few hundredths of a millisecond.'),
+        pic('synched_phones', width=150 * mm, caption='Two Pixel 7a on a stereo bar, synchronised within about '
+                                                       '20 µs (left: CONTROL + CAMERA, right: CAMERA).'),
         P('What the app can do', 'h2'),
         *bullets(['<b>Stereo photos</b>: JPEG, RAW (DNG) or both, with the same exposure, white balance and '
                   'focus on all phones.',
@@ -375,7 +377,8 @@ def ch_start():
 def ch_main():
     master_rows = [
         ['1', 'Sync status', '<b>Green SYNC ±N µs</b>: all camera phones are connected and their clocks '
-                             'agree within N microseconds. <b>Yellow</b>: in sync, frames still being aligned. '
+                             'agree within N microseconds. <b>Yellow</b>: in sync, frames still being aligned, or <b>(measuring)</b> '
+                             'for a few seconds after a correction (the last value is shown). '
                              '<b>Red SYNC …</b>: a camera phone is missing or not in sync yet. Then each camera '
                              'phone with its side (L / R).'],
         ['2', 'Standby (moon)', 'Switches all cameras off to save battery. Tap the CONTROL screen to wake them.'],
@@ -426,6 +429,13 @@ def ch_main():
         warn('Keep SyncCamPhone in front on the CONTROL phone. If its screen goes off or another app is opened, '
              'it stops answering; the cameras reconnect when it is back, and the clock needs about 30 s to '
              'settle again.'),
+        P('3.5 Viewing photos and videos', 'h2'),
+        *bullets(['Tap the thumbnail under the shutter: the last photo or video opens full screen. Swipe right for '
+                  'older and left for newer ones (the files of this phone only).',
+                  'Photos: pinch to zoom, drag to move, double tap for fit / 100 %. When zoomed in, a swipe moves '
+                  'within the photo.',
+                  'Videos: tap to play or pause (with sound); the bar at the bottom jumps to any point.',
+                  'The X or the Back key closes the viewer.']),
     ]
 
 
@@ -471,7 +481,8 @@ def ch_photo():
                 'the image on a camera phone: all phones then use that distance.',
                 'Press the shutter. All phones take the photo at the same moment.']),
         P('Below the sync status the CONTROL phone shows the result of the last photo, e.g. <b>photo #12: -3 µs'
-          '</b> (how far apart the frames of the phones were). The thumbnail under the shutter shows the last photo.'),
+          '</b> (how far apart the frames of the phones were). The thumbnail under the shutter shows the last photo '
+          'or video; tap it to view your photos and videos (chapter 3.5).'),
         P('5.2 Formats', 'h2'),
         P('Choose the format in <b>Settings → PHOTO → Format</b> (or tap the photo chip).'),
         table(fmt, [30, 140]),
@@ -563,6 +574,12 @@ def ch_video():
         P('<b>Bitrate mode</b> (VIDEO settings): <b>VBR</b> is an average target - the encoder uses less in easy '
           'scenes and may use more in noisy ones. <b>CBR</b> holds the set bitrate (most detail in busy scenes, '
           'largest files). Each video\'s frame list records the mode used.'),
+        P('<b>Lost frames</b>: on some phones (e.g. Xreal Beam Pro at 4K) the camera now and then skips a frame. '
+          'A note after the recording says where (e.g. <b>1 frame missing at 0:16.8</b>); the frame list in the '
+          'Info folder has the details. With <b>Fill lost frames</b> on, the previous frame is repeated instead, so '
+          'both eyes always have the same number of frames (a frame that arrives late is then replaced by the '
+          'copy). A smaller <b>Preview</b> (VIDEO settings) lowers the load on the camera and makes lost frames '
+          'rarer.'),
         P('Sound is recorded on every phone. The <b>Sound offset</b> (auto) corrects the delay of each phone\'s '
           'audio.'),
         tip('4K at 80 Mbit/s uses about 600 MB per minute. The camera phone shows how many minutes still fit '
@@ -618,6 +635,9 @@ def ch_settings():
                    ['Bitrate mode', '<b>VBR</b>, CBR', 'Chapter 6.'],
                    ['Codec', '<b>H.264</b>, HEVC', 'HEVC: smaller files at the same quality.'],
                    ['Conform to 30 fps', '<b>on</b>, off', 'Off keeps the real timing (29.8 fps).'],
+                   ['Fill lost frames', '<b>off</b>, on', 'Chapter 6.'],
+                   ['Preview', '<b>1920</b>, 1280, 960, 720', 'Width of the live picture (the video is not '
+                                                                'changed). Smaller = less load on the camera.'],
                    ['Sound offset ms', '<b>auto</b>', 'Audio delay correction.']],
                   [34, 52, 84])]
     out += [pic('set_look', head='7.4 WB · TONE · FOCUS', width=125 * mm),
@@ -771,6 +791,7 @@ def ch_appendix():
             ['', 'Astro: Duration / Light frame steps / Astro WB', '1 min / 3 EV / neutral sky'],
             ['VIDEO', 'Resolution / fps / bit rate / mode', '4K / 29.8 / auto / VBR'],
             ['', 'Codec / Conform to 30 fps / Sound offset', 'H.264 / on / auto'],
+            ['', 'Fill lost frames / Preview', 'off / 1920'],
             ['WB · TONE · FOCUS', 'White balance / Tone / Focus', 'auto shared / standard / auto'],
             ['SYSTEM', 'Standby after s / Photo JPEG', '120 / camera'],
             ['', 'Burst single DNGs / GPU merge / Anti-flicker / Frame alignment', 'off / On / Off / On']]
