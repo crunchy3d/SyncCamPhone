@@ -77,6 +77,35 @@ final class VideoRecorder {
     volatile boolean doneWriting;                                   // past the stop time
 
     volatile int frames, audioFrames, skipped, skippedNoKey, skippedNoMuxer;
+    // item 41 (2026-11-25): camera frames that never reached the encoder (Beam Pro 4K: ~1 in 300) - with
+    // "Conform" the frame before the gap lasts 2/30 s (MediaInfo: variable frame rate) and tools that pair
+    // the eyes by frame NUMBER shift by one; noted in the frame list and the result
+    volatile int missing;
+    // diagnostics (#41, 2026-11-26): who lost a missing frame - the camera (no frame delivered: G rows) or the
+    // encoder (frame delivered, no encoded sample: D rows, e.g. CBR rate control skipping)
+    volatile int camGaps, encDropped;
+    volatile int filled, fillExtra;                // gaps filled with the encoder's repeat (R rows), extra frames (X)
+    private boolean lastWasFill;
+    private final StringBuilder filledAt = new StringBuilder();
+    // no camera frame for 50 ms (1.5 periods): the encoder repeats the last one (user 2026-11-26: the frame COUNT
+    // must be right; 62 ms left some real gaps unfilled, 50 ms filled all - sometimes a late real frame becomes a copy)
+    static final long REPEAT_AFTER_US = 50_000;
+    private long lastCamTs;
+    private final StringBuilder diag = new StringBuilder();       // rows to write (guarded by pending)
+    static volatile String vendorParams = "";                     // encoder vendor parameters (Android 12+)
+    volatile String doneKey = "-";          // "#29: ..." of the last FINISHED recording with lost frames
+    volatile int number;                     // this recording's number (3D_vid_NNNN)
+    private final StringBuilder missingAt = new StringBuilder();
+
+    /** "1 frame missing at 0:07.2" or "". */
+    String missingText() {
+        int m = missing, fl = filled;
+        String t = m == 0 ? "" : m + (m == 1 ? " frame" : " frames") + " missing at " + missingAt
+                + " (frame numbers of the two eyes differ after it)";
+        if (fl > 0) t += (t.isEmpty() ? "" : "; ") + fl + (fl == 1 ? " frame" : " frames") + " filled at " + filledAt
+                + " (copy of the previous frame)";
+        return t;
+    }
     private long syncWorstNs, syncSumNs;
     private int syncN, syncUnknown;
 
@@ -103,7 +132,6 @@ final class VideoRecorder {
         this.halfPeriodNs = 500_000_000L / Math.max(1, fps);
         prepareCodec();
     }
-
     /** Automatic bitrate: about 0.32 bit per pixel (4K30: 80 Mbit/s, 1080p30: 20 Mbit/s). */
     int autoBitrate() {
         return (int) Math.min(maxBitrate(mime), (long) width * height * fps * 32 / 100);
@@ -153,19 +181,25 @@ final class VideoRecorder {
     // VBR / CBR (user 2026-11-21): the Xreal Beam Pro's Qualcomm encoder used only ~50 of 100 Mbit/s in
     // the default VBR (the bitrate is a maximum there); CBR holds it. Set by the master for all phones.
     static volatile boolean cbrWanted;
+    // "Fill lost frames" (user setting, default OFF, 2026-11-26): on = the encoder repeats the previous frame when no
+    // camera frame came within REPEAT_AFTER_US (count always right; a late real frame is then discarded and replaced
+    // by the copy); off = every camera frame as it is (a frame lost by the camera leaves a gap, reported)
+    static volatile boolean fillWanted;
+    private boolean fill;                     // the mode the codec was configured with
     private boolean cbr;                      // the mode the codec was configured with
     private String modeUsed = "VBR";
 
     /** "VBR" / "CBR" / "VBR (no CBR on this encoder)" - for the info file. */
     String modeText() {
-        return "bitrate mode " + modeUsed;
+        return "bitrate mode " + modeUsed + ", fill lost frames " + (fill ? "on" : "off");
     }
 
     synchronized int configure(int bps, boolean hevc) {
         String m = hevc ? MediaFormat.MIMETYPE_VIDEO_HEVC : MediaFormat.MIMETYPE_VIDEO_AVC;
         if (active) return bitrate;
-        boolean newCodec = !m.equals(mime) || cbr != cbrWanted;
+        boolean newCodec = !m.equals(mime) || cbr != cbrWanted || fill != fillWanted;
         cbr = cbrWanted;
+        fill = fillWanted;
         mime = m;
         int want = bps <= 0 ? autoBitrate() : Math.min(maxBitrate(m), Math.max(1_000_000, bps));
         if (want == bitrate && !newCodec) return bitrate;
@@ -212,8 +246,19 @@ final class VideoRecorder {
         }
         f.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
         f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+        if (fill) f.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, REPEAT_AFTER_US);   // #41 gap fill (user setting)
         codec = MediaCodec.createEncoderByType(mime);
         codec.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        if (android.os.Build.VERSION.SDK_INT >= 31) {               // probe (#41): what the encoder offers
+            try {
+                java.util.List<String> vp = codec.getSupportedVendorParameters();
+                vendorParams = codec.getName() + " (" + vp.size() + "): " + String.join(" ", vp);
+            } catch (Exception e) {
+                vendorParams = codec.getName() + ": vendor parameters not readable (" + e + ")";
+            }
+        } else {
+            vendorParams = codec.getName();
+        }
         codec.setInputSurface(surface);
         codec.start();
     }
@@ -231,6 +276,7 @@ final class VideoRecorder {
         framesN = 0;
         lastN = -1;
         int no = nextNumber;
+        number = no;
         String mp4 = Downloads.mainName("vid", no, "mp4");
         Downloads.Fd fd = Downloads.openFd(ctx, mp4, "video/mp4");
         pfd = fd.pfd;
@@ -250,6 +296,7 @@ final class VideoRecorder {
                             + conformFps + " s, sound resampled, pitch +"
                             + String.format(java.util.Locale.US, "%.2f %%", (conformFps * periodNs / 1e9 - 1) * 100)
                             + ")" : "real timing"));
+            if (!vendorParams.isEmpty()) csv.write("# encoder vendor parameters: " + vendorParams + "\n");
             csv.write("# F,tsLocal,tsMaster (frames written) / E,ptsUs,flags,size,realPtsUs (their samples)\n");
             videoTrack = -1;
             audioTrack = -1;
@@ -271,6 +318,18 @@ final class VideoRecorder {
         skipped = 0;
         skippedNoKey = 0;
         skippedNoMuxer = 0;
+        missing = 0;
+        camGaps = 0;
+        filled = 0;
+        fillExtra = 0;
+        lastWasFill = false;
+        filledAt.setLength(0);
+        encDropped = 0;
+        lastCamTs = 0;
+        synchronized (pending) {
+            diag.setLength(0);
+        }
+        missingAt.setLength(0);
         syncWorstNs = 0;
         syncSumNs = 0;
         syncN = 0;
@@ -315,6 +374,11 @@ final class VideoRecorder {
         if (!active) return;
         long tm = clock.toMaster(tsLocal);
         synchronized (pending) {
+            if (lastCamTs > 0 && periodNs > 0 && tsLocal - lastCamTs > periodNs * 3 / 2) {
+                camGaps++;
+                diag.append("G,").append(lastCamTs).append(',').append(tsLocal).append('\n');
+            }
+            lastCamTs = tsLocal;
             pending.addLast(new long[]{tsLocal, tm});
             while (pending.size() > 120) pending.pollFirst();
             pending.notifyAll();
@@ -353,6 +417,14 @@ final class VideoRecorder {
                         "# end, %d frames, %d sound frames, %d skipped (%d no keyframe, %d file not ready, "
                                 + "%d no timestamp)\n", frames, audioFrames, skipped, skippedNoKey, skippedNoMuxer,
                         skipped - skippedNoKey - skippedNoMuxer));
+                csv.write(String.format(java.util.Locale.US, "# lost frames: camera gaps %d (G rows), encoder dropped %d "
+                        + "(D rows), filled with the previous frame %d (R rows), extra frames after a fill %d (X rows)%n",
+                        camGaps, encDropped, filled, fillExtra));
+                if (missing > 0 || filled > 0) {
+                    csv.write("# missing camera frames: " + missingText() + " (missing: the frame before the gap "
+                            + "lasts longer, variable frame rate; filled: the encoder repeated the previous frame, "
+                            + "constant frame rate, frame numbers stay equal)\n");
+                }
                 if (syncN > 0) {
                     csv.write(String.format(java.util.Locale.US,
                             "# sync quality (|phase| + clock uncertainty): worst %.0f us, mean %.0f us, "
@@ -365,8 +437,10 @@ final class VideoRecorder {
             csv = null;
         }
         active = false;
+        doneKey = missing > 0 || filled > 0 ? "#" + number + ": " + missingText() : "-";   // snapshot (note)
         result = frames + " frames" + (audioFrames > 0 ? " + sound" : " (no sound)")
-                + (skipped > 0 ? ", " + skipped + " skipped!" : "") + " -> " + path;
+                + (skipped > 0 ? ", " + skipped + " skipped!" : "")
+                + (missing > 0 || filled > 0 ? ", " + missingText() + "!" : "") + " -> " + path;
         try {
             codec.stop();
         } catch (Exception ignored) {
@@ -425,7 +499,11 @@ final class VideoRecorder {
                 if (encOffsetNs != Long.MIN_VALUE) {
                     long local = ptsNs - encOffsetNs;
                     while (!pending.isEmpty() && pending.peekFirst()[0] < local - 1_000_000) {
-                        pending.pollFirst();         // older frame without a sample (dropped)
+                        long[] d = pending.pollFirst();   // older frame without a sample (dropped)
+                        if (started) {
+                            encDropped++;
+                            diag.append("D,").append(d[0]).append('\n');
+                        }
                     }
                     long[] f = pending.peekFirst();
                     if (f != null) return Math.abs(f[0] - local) <= 1_000_000 ? pending.pollFirst() : null;
@@ -472,6 +550,18 @@ final class VideoRecorder {
     private void handleVideoSample(ByteBuffer b, MediaCodec.BufferInfo info) {
         if (doneWriting) return;
         long[] f = frameFor(info.presentationTimeUs * 1000);
+        boolean fill = false;
+        if (f == null && started && lastN >= 0 && encOffsetNs != Long.MIN_VALUE) {
+            // #41 fill: a sample without a camera frame, between 0.5 and ~1.95 periods after the last one, is
+            // the encoder's repeat of the previous frame (KEY_REPEAT_PREVIOUS_FRAME_AFTER: the camera skipped
+            // a frame) - it takes the missing frame's slot, so the file stays at exactly one frame per period
+            long d = info.presentationTimeUs * 1000 - encOffsetNs - lastTsLocal;
+            if (d > periodNs / 2 && d < periodNs * 2 - periodNs / 20) {
+                long synth = lastTsLocal + periodNs;
+                f = new long[]{synth, clock.toMaster(synth)};
+                fill = true;
+            }
+        }
         if (f == null || f[1] == Long.MIN_VALUE) {
             if (started) skipped++;                                // frame without timestamp
             return;
@@ -504,7 +594,36 @@ final class VideoRecorder {
             }
             // frame number from the real intervals (robust against a missing frame)
             long realUs = info.presentationTimeUs;
-            long n = lastN < 0 ? 0 : lastN + Math.max(1, Math.round((f[0] - lastTsLocal) / (double) periodNs));
+            long slots = lastN < 0 ? 1 : Math.round((f[0] - lastTsLocal) / (double) periodNs);
+            if (slots < 1 && lastWasFill) {                       // a late real frame after a fill (extra frame)
+                fillExtra++;
+                try {
+                    csv.write("X," + f[0] + "\n");
+                } catch (IOException ignored) {
+                }
+            }
+            long n = lastN < 0 ? 0 : lastN + Math.max(1, slots);
+            if (fill) {
+                filled++;
+                double tf = n / (conformFps > 0 ? (double) conformFps : 1e9 / periodNs);
+                if (filled <= 20) {
+                    if (filledAt.length() > 0) filledAt.append(", ");
+                    filledAt.append(String.format(java.util.Locale.US, "%d:%04.1f", (int) (tf / 60), tf % 60));
+                }
+                try {
+                    csv.write("R," + f[0] + "\n");
+                } catch (IOException ignored) {
+                }
+            }
+            lastWasFill = fill;
+            if (lastN >= 0 && n - lastN > 1) {                     // item 41: frames missing here
+                double t = (lastN + 1) / (conformFps > 0 ? (double) conformFps : 1e9 / periodNs);
+                if (missing < 20) {
+                    if (missingAt.length() > 0) missingAt.append(", ");
+                    missingAt.append(String.format(java.util.Locale.US, "%d:%04.1f", (int) (t / 60), t % 60));
+                }
+                missing += (int) (n - lastN - 1);
+            }
             for (long k = lastN + 1; k < n; k++) {                // fill a gap (missing frame)
                 frameReal[(int) (k % frameReal.length)] = frameReal[(int) (lastN % frameReal.length)]
                         + (realUs * 1000 - frameReal[(int) (lastN % frameReal.length)]) * (k - lastN) / (n - lastN);
@@ -520,6 +639,12 @@ final class VideoRecorder {
             lastPtsUs = info.presentationTimeUs;
             frames++;
             try {
+                String dg;
+                synchronized (pending) {
+                    dg = diag.toString();
+                    diag.setLength(0);
+                }
+                if (!dg.isEmpty()) csv.write(dg);
                 csv.write("F," + f[0] + "," + tm + "\nE," + info.presentationTimeUs + "," + info.flags + ","
                         + info.size + "," + realUs + "\n");
             } catch (IOException ignored) {

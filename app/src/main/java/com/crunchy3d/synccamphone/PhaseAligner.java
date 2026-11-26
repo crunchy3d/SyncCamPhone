@@ -23,6 +23,27 @@ final class PhaseAligner {
     static final long TRIG_NS = 10_000;
     static final long TARGET_NS = 10_000;
     static final double MIN_DRIFT_NS_PER_S = 1_000;   // below 1 us/s: use plain hysteresis
+    // FILTERED TRACKING WITH OVERSHOOT (#5, user's design 2026-11-25). The Pixel 4's phase estimates scatter
+    // ~+-15 us (much of it the Wi-Fi clock); deciding on single estimates chased that noise (a step every
+    // 2.5 s, half the wrong way) and every step paused the measurement ~1 s (red / "measuring"). Now:
+    //  - first-order filter y = y + A (x - y) per frame (time constant ~1 s on top of the 1 s median),
+    //    started at the measured value;
+    //  - aligned: filtered > +TRACK_T -> step to -TRACK_T/2, < -TRACK_T -> to +TRACK_T/2 (overshoot by the
+    //    sign of the error: a real drift gives a long sawtooth around zero, noise alone rarely reaches T);
+    //  - a step shifts the stored frame times and the filter by the step: no measurement pause;
+    //  - coarse: |filtered| or |measured - filtered| > COARSE_NS -> straight to 0, filter restarted.
+    static final double FILTER_A = 1.0 / 30;
+    static final long TRACK_T_NS = 20_000;
+    static final long COARSE_NS = 1_000_000;
+    private double filtNs = Double.NaN;
+    volatile double rawPhaseNs = Double.NaN;  // last unfiltered estimate (log)
+    volatile int coarseSteps;
+    private long pendingDelta;                // the step requested, applied to the history when it lands
+    volatile double noiseNs = Double.NaN;     // (unused since the filter; kept for the log format)
+
+    double trigNs() {
+        return TRACK_T_NS;
+    }
     // segment length for a drift estimate: the segments between the steps are ~2 s now (was 5 s / 50)
     static final double MIN_SEG_S = 1.5;
     static final int MIN_SEG_POINTS = 40;
@@ -90,8 +111,18 @@ final class PhaseAligner {
             sxx += dx * dx;
             sxy += dx * (segP[i % segP.length] - my);
         }
-        return sxx > 0 ? sxy / sxx : Double.NaN;
+        if (sxx <= 0) return Double.NaN;
+        double b = sxy / sxx, r2 = 0;
+        for (int i = first; i < segCount; i++) {
+            double dx = (segT[i % segT.length] - t0) / 1e9 - mx;
+            double r = segP[i % segP.length] - my - b * dx;
+            r2 += r * r;
+        }
+        lastResidNs = Math.sqrt(r2 / n);
+        return b;
     }
+
+    private double lastResidNs = Double.NaN;
 
     /**
      * @param tMaster frame timestamp converted to master time (Long.MIN_VALUE if no clock yet)
@@ -99,17 +130,29 @@ final class PhaseAligner {
      * @param correct true if this camera should steer its phase (align on, not the reference)
      */
     void onFrame(long tMaster, String tag, Ref ref, boolean correct, SyncCamera cam) {
+        boolean stepLanded = false;
         if (pendingTag != null) {
-            // Frames up to and including the step frame are not shifted yet; restart after it.
-            if (pendingTag.equals(tag) || ++pendingFrames > 60) {
+            // frames up to and including the step frame are not shifted yet; after it all frames are
+            // later by pendingDelta: shift the history (frame times, filter) by it and go on (no pause)
+            if (pendingTag.equals(tag)) {
+                pendingTag = null;
+                stepLanded = true;
+            } else if (++pendingFrames > 60) {        // step frame never seen: restart cleanly
                 pendingTag = null;
                 count = 0;
+                filtNs = Double.NaN;
+                aligned = false;
+                return;
             }
-            return;
         }
         if (tMaster == Long.MIN_VALUE) return;
         buf[count % buf.length] = tMaster;
         count++;
+        if (stepLanded) {
+            int n = Math.min(count, buf.length);          // all stored frames incl. the step frame itself
+            for (int k = 0; k < n; k++) buf[(count - 1 - k) % buf.length] += pendingDelta;
+            if (!Double.isNaN(filtNs)) filtNs += pendingDelta;
+        }
         int nf = correct && !aligned ? N_FAST : N;   // fewer frames while aligning (faster start)
         if (count < nf) {
             phaseValid = false;
@@ -133,7 +176,11 @@ final class PhaseAligner {
             phaseValid = false;
             return;
         }
-        phaseNs = phaseError(t, ref);
+        double raw = phaseError(t, ref);
+        rawPhaseNs = raw;
+        if (Double.isNaN(filtNs)) filtNs = raw;
+        else filtNs += FILTER_A * (raw - filtNs);
+        phaseNs = aligned ? filtNs : raw;
         phaseValid = true;
 
         if (!correct) {
@@ -144,33 +191,46 @@ final class PhaseAligner {
         segT[segCount % segT.length] = t[nf - 1];
         segP[segCount % segP.length] = phaseNs;
         segCount++;
+        double slope = segmentSlope();                // drift: for the log only
+        if (pendingTag != null) return;               // a step is on its way
 
-        // drift rate: current segment if long enough, else the last segment's value
-        double slope = segmentSlope();
-        double drift = !Double.isNaN(slope) ? slope : (driftValid ? driftNsPerS : Double.NaN);
-        boolean useDrift = aligned && !Double.isNaN(drift) && Math.abs(drift) >= MIN_DRIFT_NS_PER_S;
-
-        double target;
-        if (useDrift) {
-            double s = Math.signum(drift);              // direction the phase moves
-            double ahead = phaseNs * s;                 // > 0: past zero in the drift direction
-            if (ahead <= TRIG_NS && ahead >= -TRACK_NS) return;
-            target = -s * TARGET_NS;
-        } else {
-            double limit = aligned ? TRACK_NS : ALIGN_NS;
-            if (Math.abs(phaseNs) <= limit) {
+        double target, err;
+        if (!aligned) {
+            // (re)aligning on the measured value, straight to 0; then the filter starts there
+            if (Math.abs(raw) <= ALIGN_NS) {
                 aligned = true;
+                filtNs = raw;
                 return;
             }
+            err = raw;
             target = 0;
+        } else if (Math.abs(filtNs) > COARSE_NS || Math.abs(raw - filtNs) > COARSE_NS) {
+            aligned = false;                          // a big jump: coarse correction to 0
+            coarseSteps++;
+            filtNs = Double.NaN;
+            err = raw;
+            target = 0;
+        } else if (filtNs > TRACK_T_NS) {
+            err = filtNs;
+            target = -TRACK_T_NS / 2.0;               // overshoot to the other side
+        } else if (filtNs < -TRACK_T_NS) {
+            err = filtNs;
+            target = TRACK_T_NS / 2.0;
+        } else {
+            return;
         }
-        // We are phaseNs late (positive) or early: shift all later frames by target - phaseNs.
-        long delta = Math.round(target - phaseNs);
+        // we are err late (positive) or early: shift all later frames by target - err
+        long delta = Math.round(target - err);
         String stepTag = cam.requestStep(delta);
-        if (stepTag == null) stepTag = cam.requestStep(delta + Math.round(ref.period));
+        if (stepTag == null) {
+            delta += Math.round(ref.period);
+            stepTag = cam.requestStep(delta);
+        }
         if (stepTag != null) {
             pendingTag = stepTag;
             pendingFrames = 0;
+            pendingDelta = Double.isNaN(filtNs) ? 0 : delta;
+            if (Double.isNaN(filtNs)) count = 0;     // coarse: measure afresh after it
             steps++;
             lastStepNs = delta;
             if (!Double.isNaN(slope)) {
@@ -178,8 +238,6 @@ final class PhaseAligner {
                 driftValid = true;
             }
             segCount = 0;
-            aligned = false;
-            phaseValid = false;
         }
     }
 

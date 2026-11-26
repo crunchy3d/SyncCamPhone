@@ -69,6 +69,7 @@ final class SyncNet {
     //                   |lens (52: Lenses kind 0 main, 1 ultra-wide, 2 telephoto, 3 front; copied to the cameras,
     //                   which may then choose another lens themselves)
     //                   |cbr (53: 1 = constant video bitrate, 0 = variable: the bitrate is a maximum)
+    //                   |... |previewW (56: preview width limit 1920 / 1280 / 960 / 720)|fillLost (57: 1 = fill lost video frames)
     //                   |timelapse (54: 0, or the number of the time-lapse's first photo: folder Timelapse_NNNN)
     //                   |sideWarn (55: "-", or the warning naming the phones that share a side, e.g. LEFT)
     // recStart / recStop: master time of the first / last recorded frame (recStop 0 = not set)

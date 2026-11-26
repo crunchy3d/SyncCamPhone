@@ -48,10 +48,14 @@ public class SyncActivity extends Activity {
     private TextView header, table, logView, syncView;
 
     /** Sync display: green <= 50 us, yellow <= 1 ms, red above or unknown (< 0). */
+    // qNs <= -2: MEASURING (#5, 2026-11-25) - the frame phase is paused after a correction step but the clock
+    // is fine: yellow with the last measured value (-2 - qNs) instead of a red "…"
     private static void showSync(TextView v, long qNs, String detail) {
-        int color = qNs < 0 ? RED : qNs <= 100_000 ? GREEN : qNs <= 1_000_000 ? YELLOW : RED;
-        String q = qNs < 0 ? "…" : qNs < 1_000_000 ? String.format(Locale.US, "±%d µs", Math.round(qNs / 1e3))
-                : String.format(Locale.US, "±%.1f ms", qNs / 1e6);
+        boolean measuring = qNs <= -2;
+        if (measuring) qNs = -2 - qNs;
+        int color = qNs < 0 ? RED : measuring ? YELLOW : qNs <= 100_000 ? GREEN : qNs <= 1_000_000 ? YELLOW : RED;
+        String q = qNs < 0 ? "…" : (qNs < 1_000_000 ? String.format(Locale.US, "±%d µs", Math.round(qNs / 1e3))
+                : String.format(Locale.US, "±%.1f ms", qNs / 1e6)) + (measuring ? " (measuring)" : "");
         SpannableStringBuilder sb = new SpannableStringBuilder();
         dot(sb, color);
         int s = sb.length();
@@ -74,13 +78,25 @@ public class SyncActivity extends Activity {
     private final java.util.Map<String, long[]> lastQuality = new java.util.HashMap<>();
 
     private long held(String key, long q) {
+        return held(key, q, false);
+    }
+
+    /** As held(); clockOk: 3..15 s after the last value, -2 - last ("measuring", yellow) instead of -1. */
+    private long held(String key, long q, boolean clockOk) {
         long now = SystemClock.elapsedRealtime();
         if (q >= 0) {
             lastQuality.put(key, new long[]{q, now});
             return q;
         }
         long[] l = lastQuality.get(key);
-        return l != null && now - l[1] < 3000 ? l[0] : -1;
+        if (l == null) return -1;
+        if (now - l[1] < 3000) return l[0];
+        return clockOk && now - l[1] < 15000 ? -2 - l[0] : -1;
+    }
+
+    /** The value of a held() result: >= 0, or -1 when unknown ("measuring" counts as its last value). */
+    private static long qValue(long q) {
+        return q <= -2 ? -2 - q : q;
     }
     private EditText fpsEdit, expEdit, isoEdit, capEdit, asymEdit, videoEdit, soundEdit, distEdit, bitrateEdit;
     private Button startButton, alignButton, stopButton, captureButton, recordButton, modeButton, photoButton;
@@ -1577,6 +1593,21 @@ public class SyncActivity extends Activity {
         hint(video, "VBR: an average target - the encoder uses less in easy scenes and may use more in noisy "
                 + "ones (Beam Pro at 100: 52 Mbit/s sunny, 124 Mbit/s dim indoors). CBR: the bitrate is held (most "
                 + "detail in busy scenes). A phone without CBR uses VBR (noted in the video's frame list).");
+        seg(video, "Fill lost frames", new String[]{"off", "on"}, () -> master.fillLost ? 1 : 0, k -> {
+            master.fillLost = k == 1;
+            master.lookChanged("fill lost video frames " + (master.fillLost ? "on" : "off"));
+            savePhotoPrefs();
+        });
+        hint(video, "On: if the camera loses a frame, the previous one is repeated - both eyes always have the same "
+                + "number of frames; but a real frame that comes late (> 50 ms) is then discarded and replaced by the "
+                + "copy. Off: every camera frame as it is; a lost frame leaves a gap (a note says where).");
+        seg(video, "Preview", PREVIEW_NAMES, () -> previewIdx(master.previewW), k -> {
+            master.previewW = PREVIEW_W[k];
+            master.lookChanged("preview up to " + PREVIEW_NAMES[k] + " pixels wide");
+            savePhotoPrefs();
+        });
+        hint(video, "Size of the live picture on the screens (the recorded video is not changed). Smaller = less load "
+                + "on the camera: fewer lost frames at 4K on some phones (Xreal Beam Pro).");
         seg(video, "Codec", new String[]{"H.264", "HEVC"}, () -> master.hevc ? 1 : 0, k -> {
             master.hevc = k == 1;
             updateBitrateLabel();
@@ -2678,8 +2709,7 @@ public class SyncActivity extends Activity {
         android.graphics.drawable.Drawable d = thumb.getDrawable();
         android.graphics.Bitmap bm = d instanceof android.graphics.drawable.BitmapDrawable
                 ? ((android.graphics.drawable.BitmapDrawable) d).getBitmap() : null;
-        if (bm == null && shownJpeg == null) return;
-        viewer = new PhotoViewer(this, bm, shownJpeg, () -> {
+        viewer = new PhotoViewer(this, shownJpeg != null ? bm : null, shownJpeg, () -> {
             if (viewer != null) rootFrame.removeView(viewer);
             viewer = null;
         });
@@ -2744,6 +2774,8 @@ public class SyncActivity extends Activity {
         if (master == null) return;
         getSharedPreferences("master", MODE_PRIVATE).edit()
                 .putBoolean("cbr", master.cbr)
+                .putInt("previewW", master.previewW)
+                .putBoolean("fillLost", master.fillLost)
                 .putBoolean("tlOn", tlOn)
                 .putInt("tlAe", tlAeMode)
                 .putString("tlInterval", tlIntervalEdit != null ? tlIntervalEdit.getText().toString() : "10")
@@ -3066,6 +3098,8 @@ public class SyncActivity extends Activity {
     private void loadPhotoPrefs() {
         android.content.SharedPreferences sp = getSharedPreferences("master", MODE_PRIVATE);
         master.cbr = sp.getBoolean("cbr", false);
+        master.previewW = PREVIEW_W[previewIdx(sp.getInt("previewW", 1920))];
+        master.fillLost = sp.getBoolean("fillLost", false);
         tlOn = sp.getBoolean("tlOn", false);
         tlAeMode = Math.max(0, Math.min(1, sp.getInt("tlAe", 0)));
         if (tlIntervalEdit != null) tlIntervalEdit.setText(sp.getString("tlInterval", "10"));
@@ -3836,6 +3870,46 @@ public class SyncActivity extends Activity {
         }
     }
 
+    static final int[] PREVIEW_W = {1920, 1280, 960, 720};
+    static final String[] PREVIEW_NAMES = {"1920", "1280", "960", "720"};
+
+    private static int previewIdx(int w) {
+        for (int i = 0; i < PREVIEW_W.length; i++) if (PREVIEW_W[i] == w) return i;
+        return 0;
+    }
+
+    private String videoThumbFor = "";
+
+    /** After a recording on this phone: its first frame becomes the thumbnail (tap = viewer, starts at it). */
+    private void checkVideoThumb() {
+        VideoRecorder r = syncCamera != null ? syncCamera.recorder() : null;
+        if (r == null || r.isRecording() || r.result.isEmpty() || r.result.equals(videoThumbFor) || thumb == null) return;
+        videoThumbFor = r.result;
+        new Thread(() -> {
+            android.graphics.Bitmap b = PhotoViewer.lastVideoFrame(this);
+            if (b != null) ui.post(() -> {
+                thumb.setImageBitmap(b);
+                shownJpeg = null;                    // the viewer then opens at the newest item (this video)
+            });
+        }, "video-thumb").start();
+    }
+
+    private String ownMissingShown = "-";
+    private final java.util.Set<String> missingShownNo = new java.util.HashSet<>();   // "who number" already shown
+
+    /** "#29: 1 frame ..." -> "29" (the video number of a missing-frame key). */
+    private static String videoNo(String key) {
+        int c = key.indexOf(':');
+        return c > 1 && key.startsWith("#") ? key.substring(1, c) : key;
+    }
+
+    /** "#5: 1 frame missing at 0:07.2" after a recording with missing frames, else "-" (item 41). */
+    private static String missingKey(VideoRecorder r) {
+        // the snapshot taken when the recording ended: at the next start the new number was briefly paired
+        // with the old counts, which showed the previous note again (user 2026-11-26)
+        return r == null ? "-" : r.doneKey;
+    }
+
     private static String recText(VideoRecorder r) {
         if (r == null) return "no encoder";
         if (r.isRecording()) {
@@ -3899,6 +3973,8 @@ public class SyncActivity extends Activity {
         timelapseTick();
         checkSideWarning();
         VideoRecorder.cbrWanted = master.cbr;
+        VideoRecorder.fillWanted = master.fillLost;
+        if (syncCamera != null) syncCamera.setPreviewMax(master.previewW);
         if (master.remoteMode == 1) {
             int[] st = remoteSyncState(null);
             RemoteService.setSync(st[0], st[1]);
@@ -3931,6 +4007,22 @@ public class SyncActivity extends Activity {
         syncCameraToNode();
         master.updateReference(role == ROLE_MASTER_CAMERA ? aligner : null);
         master.checkLost();
+        checkVideoThumb();
+        // item 41: missing video frames (own camera and camera phones) -> a note on the CONTROL phone
+        // each video's note only ONCE (by its number): the key went "-" while recording and back, which showed
+        // the previous video's note again at the next start (user 2026-11-26)
+        if (syncCamera != null) {
+            String k = missingKey(syncCamera.recorder());
+            if (!k.equals("-") && !k.equals(ownMissingShown)) {
+                if (missingShownNo.add("self " + videoNo(k))) showWarnNote("This phone, video " + k);
+                ownMissingShown = k;
+            }
+        }
+        for (MasterNode.ClientInfo c : master.clients.values()) {
+            if (!c.vidMissingNew) continue;
+            c.vidMissingNew = false;
+            if (missingShownNo.add(c.id + " " + videoNo(c.vidMissing))) showWarnNote(c.name + ", video " + c.vidMissing);
+        }
         // item 38: a tap focus on a camera phone -> that distance for all phones (like the CONTROL's own tap)
         for (MasterNode.ClientInfo c : master.clients.values()) {
             if (!c.focusNew) continue;
@@ -3951,21 +4043,24 @@ public class SyncActivity extends Activity {
 
         // sync display: the worst camera
         long worst = 0;
+        boolean measuringAny = false;
         int nCams = 0;
         StringBuilder det = new StringBuilder();
         for (MasterNode.ClientInfo c : master.clients.values()) {
             if (c.lost) continue;
             nCams++;
             long q = held(c.id, quality(c.id.equals(master.refId), c.phaseValid && master.running, c.phaseUs,
-                    c.offsetErrUs));
-            worst = q < 0 || worst < 0 ? -1 : Math.max(worst, q);
+                    c.offsetErrUs), c.offsetErrUs >= 0);
+            if (q <= -2) measuringAny = true;
+            worst = q == -1 || worst < 0 ? -1 : Math.max(worst, qValue(q));
             det.append(trim(c.name.replace("Pixel 7a ", ""), 8)).append(c.side == Downloads.SIDE_LEFT ? " L"
                     : c.side == Downloads.SIDE_RIGHT ? " R" : c.side == Downloads.SIDE_MONO ? " M" : "")
-                    .append(q < 0 ? " … " : String.format(Locale.US,
-                    " %d ", Math.round(q / 1e3)));
+                    .append(q == -1 ? " … " : String.format(Locale.US,
+                    q <= -2 ? " %d? " : " %d ", Math.round(qValue(q) / 1e3)));
         }
         if (nCams == 0 || !master.running) worst = -1;
-        updateMasterMain(worst, !master.running ? "(cameras stopped)" : nCams == 0 ? "(no camera)"
+        long shown = worst >= 0 && measuringAny ? -2 - worst : worst;
+        updateMasterMain(shown, !master.running ? "(cameras stopped)" : nCams == 0 ? "(no camera)"
                 : det.toString().trim());
         if (syncCamera != null && syncCamera.recorder() != null) syncCamera.recorder().noteSync(worst);
 
@@ -4077,7 +4172,11 @@ public class SyncActivity extends Activity {
 
     private void updateCamera() {
         remoteCamera();
+        checkVideoThumb();
+        if (syncCamera != null) camera.vidMissing = missingKey(syncCamera.recorder());   // item 41
         VideoRecorder.cbrWanted = camera.cbr;
+        VideoRecorder.fillWanted = camera.fillLost;
+        if (syncCamera != null) syncCamera.setPreviewMax(camera.previewW);
         checkSideWarning();
         Downloads.sub = camera.timelapse > 0 ? String.format(Locale.US, "Timelapse_%04d/", camera.timelapse) : "";
         if (camera.astroStopSeq >= 0) {                     // the master stopped the astro series
@@ -4117,10 +4216,10 @@ public class SyncActivity extends Activity {
         long cerr = camera.clockErrNs;
         long q = !connected || !syncCamera.isStreaming() ? -1
                 : held("self", quality(camera.isReference(), aligner.phaseValid, aligner.phaseNs / 1e3,
-                cerr < 0 ? -1 : cerr / 1e3));
+                cerr < 0 ? -1 : cerr / 1e3), cerr >= 0);
         updateCameraMain(q, camera.name().replace("Pixel 7a ", "") + " · clock " + camera.clockSource
                 + (aligner.aligned ? " · aligned" : camera.align && !camera.isReference() ? " · aligning" : ""));
-        if (syncCamera.recorder() != null) syncCamera.recorder().noteSync(q);
+        if (syncCamera.recorder() != null) syncCamera.recorder().noteSync(qValue(q));
 
         ClockEstimator.Result r = camera.estimator.compute(SystemClock.elapsedRealtimeNanos());
         SpannableStringBuilder sb = new SpannableStringBuilder();

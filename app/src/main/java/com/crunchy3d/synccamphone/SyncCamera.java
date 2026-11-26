@@ -985,7 +985,8 @@ final class SyncCamera {
                         ? -deviceDegrees : deviceDegrees;
                 int rotation = ((so == null ? 0 : so) + dev + 360) % 360;
                 recorder.configure(bitrateBps, hevc);
-                recorder.begin(ctx, name, info + ", device " + deviceDegrees + " deg, " + recorder.modeText(), clock, rotation,
+                recorder.begin(ctx, name, info + ", device " + deviceDegrees + " deg, " + recorder.modeText()
+                        + (size != null ? ", preview " + size.getWidth() + "x" + size.getHeight() : ""), clock, rotation,
                         startMaster, soundOffsetNs, a.periodNs, conformFps);
                 recording = true;
                 session.setRepeatingRequest(buildRequest(a, a.periodNs, "R"), callback, handler);
@@ -1129,6 +1130,17 @@ final class SyncCamera {
     }
 
     @SuppressLint("MissingPermission")
+    /** Preview width limit (user setting, VIDEO tab): a change rebuilds the camera session (after a recording). */
+    void setPreviewMax(int w) {
+        handler.post(() -> {
+            if (w == previewMax) return;
+            previewMax = w;
+            if (settings == null) return;
+            if (recording) reopenAfterRecording = true;
+            else reopen();
+        });
+    }
+
     private void reopen() {
         close();
         final Settings s = settings;
@@ -1196,6 +1208,14 @@ final class SyncCamera {
         });
     }
 
+    // PREVIEW SIZE (user setting 2026-11-26, VIDEO tab: 1920 / 1280 / 960 / 720, default 1920): a smaller preview
+    // lowers the image processor's load (Beam Pro 4K: lost camera frames ~1 in 1000 at 1920, ~1 in 2000 at 960)
+    static volatile int previewMax = 1920;
+
+    static int previewMaxW() {
+        return previewMax >= 320 ? previewMax : 1920;
+    }
+
     /** Size of the preview stream (landscape sensor orientation), or null. */
     Size previewSize() {
         return active != null ? size : null;
@@ -1215,7 +1235,7 @@ final class SyncCamera {
         for (int pass = 0; pass < 2 && best == null; pass++) {
             long maxDur = pass == 0 ? periodNs / 2 : (long) (periodNs * 1.005);
             for (Size z : sizes) {
-                if (z.getWidth() > 1920 || z.getHeight() > 1080) continue;
+                if (z.getWidth() > previewMaxW() || z.getHeight() > 1080) continue;
                 if (Math.abs(z.getWidth() / (double) z.getHeight() / want - 1) > 0.01) continue;
                 if (map.getOutputMinFrameDuration(SurfaceTexture.class, z) > maxDur) continue;
                 long area = (long) z.getWidth() * z.getHeight();

@@ -24,6 +24,8 @@ final class MasterNode {
         int focusSeq;                     // item 38: tap focus on this camera phone
         volatile float focusD;
         volatile boolean focusSharp, focusNew;
+        String vidMissing = "-";          // item 41: missing video frames of its last recording
+        volatile boolean vidMissingNew;
         InetAddress address;
         int port;
         volatile long lastSeenMs;
@@ -112,6 +114,8 @@ final class MasterNode {
     volatile int gpuMode = 1;                 // MergeCore.GPU_NAMES (On; Check = GPU + CPU compared)
     volatile int remoteMode;                  // item 20: 1 = remote trigger of another camera app
     volatile int lens;                        // Lenses kind (0 = main, always at start)
+    volatile boolean fillLost;                // fill lost video frames (encoder repeat), default off
+    volatile int previewW = 1920;             // preview width limit (VIDEO tab: 1920 / 1280 / 960 / 720)
     volatile boolean cbr;                     // constant video bitrate (else VBR: the bitrate is a maximum)
     volatile int timelapse;                   // 0, or the first photo number of the running time-lapse
     volatile String sideWarn = "-";           // phones that share a side (file names will not pair), or "-"
@@ -355,7 +359,7 @@ final class MasterNode {
                 photoAspect, effFormat(), conformFps, videoBitrate, hevc ? 1 : 0, appJpeg ? 1 : 0, tone, keepBurstFrames ? 1 : 0,
                 effHdrMode(), brightness, natural ? 1 : 0, hdrPlan, toneShare ? 1 : 0, jpegQuality,
                 aeActive ? 1 : 0, aeAllow, standby ? 1 : 0, sharpLevel, clarityLevel, astroStopSeq,
-                photoMode ? nightOut : -1, gpuMode, remoteMode, lens, cbr ? 1 : 0, timelapse, sideWarn.replace('|', '/'));
+                photoMode ? nightOut : -1, gpuMode, remoteMode, lens, cbr ? 1 : 0, timelapse, sideWarn.replace('|', '/'), previewW, fillLost ? 1 : 0);
     }
 
     /** The master's rendering of HDR burst #seq -> all cameras (sent 3x: UDP). */
@@ -482,6 +486,11 @@ final class MasterNode {
             }
         }
         if (f.length > 36) c.lens = Integer.parseInt(f[36]);
+        if (f.length > 40 && !f[40].equals(c.vidMissing)) {
+            boolean firstSeen = c.lastSeenMs == 0;
+            c.vidMissing = f[40];
+            if (!firstSeen && !f[40].equals("-")) c.vidMissingNew = true;
+        }
         if (f.length > 39) {
             int fs = Integer.parseInt(f[37]);
             if (fs != c.focusSeq) {

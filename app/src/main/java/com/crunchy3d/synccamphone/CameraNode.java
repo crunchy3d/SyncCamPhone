@@ -89,6 +89,8 @@ final class CameraNode {
     volatile int gpuMode;                     // MergeCore.GPU_NAMES
     volatile int remoteMode;                  // item 20: remote trigger of another camera app
     volatile int lens;                        // the master's lens (Lenses kind)
+    volatile boolean fillLost;                // fill lost video frames (STATE 57)
+    volatile int previewW = 1920;             // preview width limit (STATE 56)
     volatile boolean cbr;                     // constant video bitrate
     volatile int timelapse;                   // 0, or the folder number of the running time-lapse
     volatile String sideWarn = "-";           // the CONTROL phone's same-side warning, or "-"
@@ -97,6 +99,7 @@ final class CameraNode {
     volatile int focusSeq;
     volatile float focusTapD;
     volatile int focusTapSharp;
+    volatile String vidMissing = "-";       // item 41: "#5 1 frame missing at 0:07.2" (STATUS 40)
     volatile int lensInUse = -1;              // the lens this camera uses (sent in STATUS 36)
 
     /** The format the user chose (the AE meters for it). */
@@ -425,6 +428,8 @@ final class CameraNode {
         cbr = f.length > 53 && "1".equals(f[53]);
         timelapse = f.length > 54 ? Integer.parseInt(f[54]) : 0;
         sideWarn = f.length > 55 ? f[55] : "-";
+        previewW = f.length > 56 ? Integer.parseInt(f[56]) : 1920;
+        fillLost = f.length > 57 && "1".equals(f[57]);
         lastStateMs = SystemClock.elapsedRealtime();
         Runnable np = onNewPhoto;
         if (np != null && photoSeq != prevPhotoSeq) np.run();
@@ -486,11 +491,13 @@ final class CameraNode {
         boolean ownValid = a != null && a.ownValid;
         if (streaming && a != null) {
             // "# <t> phase <phaseNs|nan> <aligned> <steps> <lastStepNs> <clockOffsetNs> <clockErrNs>
-            //  <driftNsPerS|nan>"
-            logEvent(String.format(java.util.Locale.US, "phase %s %d %d %.0f %.0f %.0f %s",
+            //  <driftNsPerS|nan> <rawPhaseNs|nan> <coarseSteps> (phase = filtered once aligned)"
+            logEvent(String.format(java.util.Locale.US, "phase %s %d %d %.0f %.0f %.0f %s %s %.0f",
                     phaseValid ? String.format(java.util.Locale.US, "%.0f", a.phaseNs) : "nan",
                     a.aligned ? 1 : 0, a.steps, a.lastStepNs, r.offsetNs, r.offsetErrNs,
-                    a.driftValid ? String.format(java.util.Locale.US, "%.0f", a.driftNsPerS) : "nan"));
+                    a.driftValid ? String.format(java.util.Locale.US, "%.0f", a.driftNsPerS) : "nan",
+                    Double.isNaN(a.rawPhaseNs) ? "nan" : String.format(java.util.Locale.US, "%.0f", a.rawPhaseNs),
+                    (double) a.coarseSteps));   // + unfiltered phase, coarse steps (#5 filter)
         }
         byte[] out = SyncNet.msg(SyncNet.STATUS, id, name.replace('|', '/'),
                 Math.round(r.offsetNs), clockErrNs >= 0 ? clockErrNs : Math.round(r.offsetErrNs),
@@ -505,7 +512,7 @@ final class CameraNode {
                 Downloads.side, Math.max(maxImg, photoSeqDone), maxVid,
                 aeSeq, Double.isNaN(aeRatio) ? 1.0 : aeRatio, aeLight, aeClip,
                 Float.isNaN(rawDark) ? -1f : rawDark, Float.isNaN(rawMedian) ? -1f : rawMedian, SyncNet.join(awb),
-                lensInUse, focusSeq, focusTapD, focusTapSharp);
+                lensInUse, focusSeq, focusTapD, focusTapSharp, vidMissing);
         s.send(new DatagramPacket(out, out.length, m, SyncNet.PORT));
     }
 
