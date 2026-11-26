@@ -3,7 +3,7 @@
  "Synchronised stereo photos and videos with Android phones": "Android スマートフォンで同期したステレオ写真と動画を撮影",
  "User Manual": "ユーザーマニュアル",
  "For Google Pixel 7a, Pixel 4 and Xreal Beam Pro": "Google Pixel 7a、Pixel 4、Xreal Beam Pro 用",
- "Version V0.106 – November 2026": "バージョン V0.106 – 2026 年 11 月",
+ "Version V0.107 – November 2026": "バージョン V0.107 – 2026 年 11 月",
  "Damir Vrancic and Claude": "Damir Vrancic and Claude",
  "Contents": "目次",
  "1. Introduction": "1. はじめに",
@@ -287,5 +287,15 @@
  "11. Appendix: default settings": "11. 付録：初期設定",
  "Tab": "タブ",
  "Default": "初期値",
- "SyncCamPhone V0.106 – User Manual": "SyncCamPhone V0.106 – ユーザーマニュアル"
+ "SyncCamPhone V0.107 – User Manual": "SyncCamPhone V0.107 – ユーザーマニュアル",
+ "<b>Green SYNC ±N µs</b>: all camera phones are connected and their clocks agree within N microseconds. <b>Yellow</b>: in sync, frames still being aligned, or <b>(measuring)</b> for a few seconds after a correction (the last value is shown). <b>Red SYNC …</b>: a camera phone is missing or not in sync yet. Then each camera phone with its side (L / R).": "<b>緑の SYNC ±N µs</b>：すべてのカメラ端末が接続され、時計の差が N マイクロ秒以内です。<b>黄</b>：同期済みで、フレームを合わせている途中、または補正後の数秒間 <b>(measuring)</b>（最後の値を表示）。<b>赤の SYNC …</b>：カメラ端末が足りないか、まだ同期していません。続いて、各カメラ端末とその側（L / R）が表示されます。",
+ "3.5 Viewing photos and videos": "3.5 写真と動画を見る",
+ "Tap the thumbnail under the shutter: the last photo or video opens full screen. Swipe right for older and left for newer ones (the files of this phone only).": "シャッターの下のサムネイルをタップすると、最後の写真または動画が全画面で開きます。右にスワイプすると古いもの、左にスワイプすると新しいものが表示されます（この端末のファイルのみ）。",
+ "Photos: pinch to zoom, drag to move, double tap for fit / 100 %. When zoomed in, a swipe moves within the photo.": "写真：2 本の指で拡大縮小、ドラッグで移動、ダブルタップで全体表示 / 100 %。拡大中は、スワイプで写真の中を移動します。",
+ "Videos: tap to play or pause (with sound); the bar at the bottom jumps to any point.": "動画：タップで再生・一時停止（音声付き）。下のバーで任意の位置に移動できます。",
+ "The X or the Back key closes the viewer.": "X または戻るキーでビューアーを閉じます。",
+ "Below the sync status the CONTROL phone shows the result of the last photo, e.g. <b>photo #12: -3 µs</b> (how far apart the frames of the phones were). The thumbnail under the shutter shows the last photo or video; tap it to view your photos and videos (chapter 3.5).": "CONTROL スマートフォンには、同期状態の下に前回の写真の結果が表示されます（例：<b>photo #12: -3 µs</b>、各端末のフレームがどれだけずれていたか）。シャッターの下のサムネイルには最後の写真または動画が表示され、タップすると写真と動画を見られます（3.5 節）。",
+ "<b>Lost frames</b>: on some phones (e.g. Xreal Beam Pro at 4K) the camera now and then skips a frame. A note after the recording says where (e.g. <b>1 frame missing at 0:16.8</b>); the frame list in the Info folder has the details. With <b>Fill lost frames</b> on, the previous frame is repeated instead, so both eyes always have the same number of frames (a frame that arrives late is then replaced by the copy). A smaller <b>Preview</b> (VIDEO settings) lowers the load on the camera and makes lost frames rarer.": "<b>失われたフレーム</b>：一部の端末（例：4K の Xreal Beam Pro）では、カメラがときどきフレームを 1 枚飛ばします。録画後のメッセージがその位置を示します（例：<b>1 frame missing at 0:16.8</b>）。詳細は Info フォルダーのフレームリストにあります。<b>Fill lost frames</b> をオンにすると、代わりに直前のフレームが繰り返され、両目のフレーム数が常に同じになります（遅れて届いたフレームはそのコピーに置き換えられます）。<b>Preview</b>（VIDEO 設定）を小さくするとカメラの負荷が下がり、フレームが失われにくくなります。",
+ "Width of the live picture (the video is not changed). Smaller = less load on the camera.": "ライブ映像の幅（動画は変わりません）。小さいほどカメラの負荷が下がります。",
+ "Two Pixel 7a on a stereo bar, synchronised within about 20 µs (left: CONTROL + CAMERA, right: CAMERA).": "ステレオバーに取り付けた 2 台の Pixel 7a。約 20 µs 以内で同期しています（左：CONTROL + CAMERA、右：CAMERA）。"
 }

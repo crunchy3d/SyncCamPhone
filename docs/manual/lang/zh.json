@@ -3,7 +3,7 @@
  "Synchronised stereo photos and videos with Android phones": "用 Android 手机拍摄同步立体照片和视频",
  "User Manual": "用户手册",
  "For Google Pixel 7a, Pixel 4 and Xreal Beam Pro": "适用于 Google Pixel 7a、Pixel 4 和 Xreal Beam Pro",
- "Version V0.106 – November 2026": "版本 V0.106 – 2026 年 11 月",
+ "Version V0.107 – November 2026": "版本 V0.107 – 2026 年 11 月",
  "Damir Vrancic and Claude": "Damir Vrancic and Claude",
  "Contents": "目录",
  "1. Introduction": "1. 简介",
@@ -287,5 +287,15 @@
  "11. Appendix: default settings": "11. 附录：默认设置",
  "Tab": "选项卡",
  "Default": "默认值",
- "SyncCamPhone V0.106 – User Manual": "SyncCamPhone V0.106 – 用户手册"
+ "SyncCamPhone V0.107 – User Manual": "SyncCamPhone V0.107 – 用户手册",
+ "<b>Green SYNC ±N µs</b>: all camera phones are connected and their clocks agree within N microseconds. <b>Yellow</b>: in sync, frames still being aligned, or <b>(measuring)</b> for a few seconds after a correction (the last value is shown). <b>Red SYNC …</b>: a camera phone is missing or not in sync yet. Then each camera phone with its side (L / R).": "<b>绿色 SYNC ±N µs</b>：所有相机手机都已连接，时钟误差在 N 微秒以内。<b>黄色</b>：已同步，帧仍在对齐中，或在一次校正后的几秒钟内显示 <b>(measuring)</b>（显示最后测得的值）。<b>红色 SYNC …</b>：缺少某部相机手机，或尚未同步。其后是每部相机手机及其所在侧（L / R）。",
+ "3.5 Viewing photos and videos": "3.5 查看照片和视频",
+ "Tap the thumbnail under the shutter: the last photo or video opens full screen. Swipe right for older and left for newer ones (the files of this phone only).": "轻触快门下方的缩略图：最近的照片或视频会全屏打开。向右滑动查看更早的，向左滑动查看更新的（仅本手机的文件）。",
+ "Photos: pinch to zoom, drag to move, double tap for fit / 100 %. When zoomed in, a swipe moves within the photo.": "照片：双指缩放，拖动移动，双击在适合屏幕 / 100 % 之间切换。放大时，滑动会在照片内移动。",
+ "Videos: tap to play or pause (with sound); the bar at the bottom jumps to any point.": "视频：轻触播放或暂停（带声音）；底部的进度条可跳到任意位置。",
+ "The X or the Back key closes the viewer.": "X 或返回键关闭查看器。",
+ "Below the sync status the CONTROL phone shows the result of the last photo, e.g. <b>photo #12: -3 µs</b> (how far apart the frames of the phones were). The thumbnail under the shutter shows the last photo or video; tap it to view your photos and videos (chapter 3.5).": "CONTROL 手机会在同步状态下方显示上一张照片的结果，例如 <b>photo #12: -3 µs</b>（各手机帧之间相差多少）。快门下方的缩略图显示最近的照片或视频；轻触即可查看你的照片和视频（第 3.5 节）。",
+ "<b>Lost frames</b>: on some phones (e.g. Xreal Beam Pro at 4K) the camera now and then skips a frame. A note after the recording says where (e.g. <b>1 frame missing at 0:16.8</b>); the frame list in the Info folder has the details. With <b>Fill lost frames</b> on, the previous frame is repeated instead, so both eyes always have the same number of frames (a frame that arrives late is then replaced by the copy). A smaller <b>Preview</b> (VIDEO settings) lowers the load on the camera and makes lost frames rarer.": "<b>丢失的帧</b>：在某些手机上（例如 4K 下的 Xreal Beam Pro），相机偶尔会跳过一帧。录制后会有提示说明位置（例如 <b>1 frame missing at 0:16.8</b>）；Info 文件夹中的帧列表有详细信息。开启 <b>Fill lost frames</b> 后，会改为重复上一帧，使两只眼睛的帧数始终相同（迟到的帧随后会被这份副本替换）。较小的 <b>Preview</b>（VIDEO 设置）可降低相机负载，使丢帧更少。",
+ "Width of the live picture (the video is not changed). Smaller = less load on the camera.": "实时画面的宽度（视频不受影响）。越小 = 相机负载越低。",
+ "Two Pixel 7a on a stereo bar, synchronised within about 20 µs (left: CONTROL + CAMERA, right: CAMERA).": "立体支架上的两部 Pixel 7a，同步误差约 20 µs（左：CONTROL + CAMERA，右：CAMERA）。"
 }
